@@ -28,6 +28,7 @@ void main()
 #version 330
 
 in vec2 uv;
+in vec4 lhsa;
 //in float texture_ind;
 
 //uniform sampler2D image;
@@ -42,8 +43,8 @@ vec3 hsv2rgb(vec3 c)
 
 void main()
 {
-    vec4 hsva = texture(image, uvlh.xyz);
-    hsva.x = mod(hsva.x + uvlh.w, 1.0);
+    vec4 hsva = texture(image, vec3(uv, lhsa.x));
+    hsva.x = mod(hsva.x + lhsa.y, 1.0);
     vec3 rgb = hsv2rgb(hsva.xyz);
     gl_FragColor = vec4(rgb, hsva.a);
 }
