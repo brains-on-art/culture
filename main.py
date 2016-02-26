@@ -8,6 +8,7 @@ import boa_gfx.gl_shader
 import boa_gfx.gl_texture
 
 from creature import Culture
+import culture
 
 
 class Program(object):
@@ -33,6 +34,7 @@ class Program(object):
         self.event_manager.add_quit_callback(toggle_running)
         self.event_manager.add_keydown_callback(sdl2.SDLK_q, toggle_running)
         boa_gfx.gl_shader.shader_manager.shader_paths.append('./boa_gfx/shaders')
+        boa_gfx.gl_shader.shader_manager.shader_paths.append('./shaders')
         boa_gfx.gl_texture.texture_manager.texture_paths.append('./textures')
 
         self.windows[0].camera.position = (0.0, 0.0, 13.0)
@@ -41,10 +43,12 @@ class Program(object):
         background = TexturedTriangleStrip(texture_name='background.png')
         background.scale = 13
 
-        culture = Culture(self.event_manager)
-        for i in range(100):
-            culture.add_creature()
+        #c_old = Culture(self.event_manager)
+        #for i in range(100):
+        #    c_old.add_creature()
 
+        c = culture.Culture()
+        #c.position = (0.0, 0.0, 0.)
 
         #u = HaloCreature()
         #print('u vertex data:', u.vertex_data)
@@ -61,7 +65,8 @@ class Program(object):
 
             #u.update()
             #v# .update()
-            culture.update()
+            #c_old.update()
+            c.update(self.dynamo.dt)
 
             for w in self.windows:
                 w.render()
