@@ -41,12 +41,23 @@ class Culture(object):
             target.position = tuple(self.creature_data[i, :2] + (0.0, 5.0))
             self.pm_target.append(target)
 
-            target_spring = pm.constraint.DampedSpring(body, target, (0.0, 0.8), (0.0, 0.0), 0.0, 1.0, 5.0)
+            target_spring = pm.constraint.DampedSpring(body, target, (0.0, 0.8), (0.0, 0.0), 0.0, 10.0, 5.0)
             self.pm_constraints.append(target_spring)
 
             self.pm_space.add([body, target_spring])
 
+        self.prev_update = time.perf_counter()
+        self.ct = time.perf_counter()
+
+        #self.dt = p0.0
+
     def update(self, dt):
+        self.ct = time.perf_counter()
+        if self.ct - self.prev_update > 2.0:
+            i = np.random.randint(0, max_creatures)
+            self.pm_target[i].position = tuple(np.random.random(2)*20.0 - 10.0)
+            self.prev_update = self.ct
+
         self.pm_space.step(dt)
 
         for i in range(max_creatures):
