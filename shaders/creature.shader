@@ -45,6 +45,8 @@ void main()
 {
     vec4 hsva = texture(image, vec3(uv, lhsa.x));
     hsva.x = mod(hsva.x + lhsa.y, 1.0);
+    hsva.y = hsva.y * lhsa.z;
+    hsva.a = hsva.a * lhsa.a;
     vec3 rgb = hsv2rgb(hsva.xyz);
     gl_FragColor = vec4(rgb, hsva.a);
 }
