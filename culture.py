@@ -1,6 +1,4 @@
-import os
 import numpy as np
-from PIL import Image
 
 from OpenGL import GL
 
@@ -9,16 +7,8 @@ from boa_gfx import Mesh, VBO, VAO
 from boa_gfx.gl_texture import TextureArray
 import ctypes
 
-def create_texture_array(texture_directory):
-    texture_files = []
-    for root, dirs, files in os.walk(texture_directory):
-        texture_files.extend([os.path.join(root, x) for x in files if '.png' in x])
-    im = []
-    for image_path in texture_files:
-        im.append(np.array(Image.open(image_path, 'r'))[::-1, :, :])
-    image_data = np.stack(im)
-    tex_array = TextureArray('creature_textures', image_data, im[0].shape[0], im[0].shape[1], len(im), im[0].shape[2])
-    return tex_array
+import SharedArray as sa
+
 
 ALIVE = 0
 ID = 1
@@ -67,20 +57,10 @@ CREATURE_DATA = [{'name': 'creature_position',
 
 
 class Culture(Mesh):
-    def __init__(self, max_creatures=4000):
+    def __init__(self):
         super().__init__()
 
-        self.max_creatures = max_creatures
-
-        #self.creature_data = np.random.randint(0, 10, self.max_creatures).astype(np.float32)
-        self.creature_data = np.random.random((self.max_creatures, 5)).astype(np.float32)*20.0 - 10.0
-        self.creature_data[:, 2] = np.random.random(self.max_creatures).astype(np.float32)*2*np.pi - np.pi
-        self.creature_data[:, 3] = np.random.randint(0, 10, self.max_creatures).astype(np.float32)
-        self.creature_data[:, 4] = np.random.randint(0, 4, self.max_creatures).astype(np.float32)/4.0
-        #self.creature_data = np.array([[10.0, 10.0],
-        #                               [10.0, -10.0],
-        #                               [-10.0, 10.0],
-        #                               [-10.0, -10.0]], dtype=np.float32)
+        self.creature_data = sa.attach('creature_data')
 
         self.shader = boa_gfx.gl_shader.shader_manager.get_shader('creature.shader')
         self.shader.bind()
@@ -88,9 +68,7 @@ class Culture(Mesh):
         GL.glUniform1i(image_loc, 0)
         self.shader.unbind()
 
-        self.texture = boa_gfx.gl_texture.texture_manager.get_texture('molli2.png')
-
-        self.texture_array = create_texture_array('./128x128/')
+        self.texture_array = TextureArray.from_directory('./128x128/')
         print(self.texture_array.layers)
 
         self.quad_vbo = VBO(square)
@@ -100,13 +78,8 @@ class Culture(Mesh):
         self.vao.add_vbo(self.creature_vbo, CREATURE_DATA)
 
         self.scene.drawable.append(self)
-        # self.creature_data = np.zeros((12, max_creatures))
-        # self.creature_parts = np.zeros((8, 5*max_creatures))
-
-        # self.texture = create_texture_array('./textures/128x128')
 
     def update(self, dt):
-        self.creature_data[:, 2] += dt
         self.creature_vbo.update_data(self.creature_data, 0)
 
     def draw(self):
