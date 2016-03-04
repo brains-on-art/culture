@@ -32,11 +32,12 @@ class Culture(object):
         # COLOR ROTATION
         self.creature_parts[:, 5] = np.random.randint(0, 4, max_creatures)/4.0
         # SATURATION
-        self.creature_parts[:, 6] = np.random.randint(0, 5, max_creatures)/4.0
+        self.creature_parts[:, 6] = 1.0
         # ALPHA
-        self.creature_parts[:, 7] = np.random.randint(1, 5, max_creatures)/4.0
+        self.creature_parts[:, 7] = 1.0
 
-        self.creature_data = np.zeros((max_creatures, 2))
+        self.creature_data = np.zeros((max_creatures, 3))
+        self.creature_data[:, 1] = 1.0 # max_age
 
         self.pm_space = pm.Space()
         self.pm_space.damping = 0.9
@@ -73,7 +74,8 @@ class Culture(object):
             self.pm_body[ind].reset_forces()
             self.pm_body[ind].velocity = 0.0, 0.0
             self.pm_target[ind].position = tuple(new_pos + (0.0, 0.8))
-            self.creature_data[ind] = 1.0
+            self.creature_data[ind, :] = [1.0, np.random.random(1)*10+1, 0.0]  # Alive, max_age, age
+            self.creature_parts[ind, 6] = 1.0
 
     def update(self, dt):
         self.ct = time.perf_counter()
@@ -82,6 +84,17 @@ class Culture(object):
             #i = np.random.randint(0, max_creatures)
             #self.pm_target[i].position = tuple(np.random.random(2)*20.0 - 10.0)
             self.prev_update = self.ct
+
+        alive = self.creature_data[:, 0]
+        max_age = self.creature_data[:, 1]
+        cur_age = self.creature_data[:, 2]
+        cur_age[:] += dt
+        self.creature_parts[:, 6] = np.clip(1.0 - (cur_age / max_age), 0.0, 1.0)
+        # dying_creatures = (alive == 1.0) & (cur_age > max_age)
+        self.creature_parts[:, 7] = np.clip(1.0 - (cur_age - max_age)/5.0, 0.0, 1.0)
+        dead_creatures = (alive == 1.0) & (cur_age > max_age + 5.0)
+        self.creature_data[dead_creatures, 0] = 0.0
+
 
         self.pm_space.step(dt)
 
