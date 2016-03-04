@@ -3,7 +3,7 @@
 
 layout(location = 0)in vec2 position;
 layout(location = 1)in vec2 texture_coordinate;
-layout(location = 2)in vec3 creature_position;
+layout(location = 2)in vec4 creature_position;
 layout(location = 3)in vec4 creature_texture;
 
 uniform mat4 MVP;
@@ -17,7 +17,7 @@ void main()
     float theta = creature_position.z;
     mat2 z_rot = mat2(cos(theta), -sin(theta),
                       sin(theta), cos(theta));
-    gl_Position = MVP * vec4(z_rot*position + creature_position.xy, 0.0, 1.0);
+    gl_Position = MVP * vec4(z_rot*creature_position.w*position + creature_position.xy, 0.0, 1.0);
     uv = texture_coordinate;
     lhsa = creature_texture;
     //texture_ind = creature_texture.x;
