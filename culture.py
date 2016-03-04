@@ -40,10 +40,10 @@ square = np.array([[-1.0,  1.0, 0.0, 1.0],  # X, Y, S, T
 
 CREATURE_DATA = [{'name': 'creature_position',
                   'index': 2,
-                  'components': 3,
+                  'components': 4,
                   'gl_type': GL.GL_FLOAT,
                   'normalized': GL.GL_FALSE,
-                  'stride': 7*4,
+                  'stride': 8*4,
                   'offset': ctypes.c_void_p(0),
                   'divisor': 1},
                  {'name': 'creature_texture',
@@ -51,8 +51,8 @@ CREATURE_DATA = [{'name': 'creature_position',
                   'components': 4,
                   'gl_type': GL.GL_FLOAT,
                   'normalized': GL.GL_FALSE,
-                  'stride': 7*4,
-                  'offset': ctypes.c_void_p(3*4),
+                  'stride': 8*4,
+                  'offset': ctypes.c_void_p(4*4),
                   'divisor': 1}]
 
 
@@ -60,7 +60,7 @@ class Culture(Mesh):
     def __init__(self):
         super().__init__()
 
-        self.creature_data = sa.attach('creature_data')
+        self.creature_parts = sa.attach('creature_parts')
 
         self.shader = boa_gfx.gl_shader.shader_manager.get_shader('creature.shader')
         self.shader.bind()
@@ -72,7 +72,7 @@ class Culture(Mesh):
         print(self.texture_array.layers)
 
         self.quad_vbo = VBO(square)
-        self.creature_vbo = VBO(self.creature_data, usage=GL.GL_DYNAMIC_DRAW)
+        self.creature_vbo = VBO(self.creature_parts, usage=GL.GL_DYNAMIC_DRAW)
         self.vao = VAO()
         self.vao.add_vbo(self.quad_vbo, VAO.TEXTURED_DATA_2D)
         self.vao.add_vbo(self.creature_vbo, CREATURE_DATA)
@@ -80,7 +80,7 @@ class Culture(Mesh):
         self.scene.drawable.append(self)
 
     def update(self, dt):
-        self.creature_vbo.update_data(self.creature_data, 0)
+        self.creature_vbo.update_data(self.creature_parts, 0)
 
     def draw(self):
         self.shader.m_matrix = self.m_matrix
@@ -89,7 +89,7 @@ class Culture(Mesh):
         self.shader.bind()
         self.vao.bind()
 
-        GL.glDrawArraysInstanced(GL.GL_TRIANGLE_STRIP, 0, 4, self.creature_data.shape[0])
+        GL.glDrawArraysInstanced(GL.GL_TRIANGLE_STRIP, 0, 4, self.creature_parts.shape[0])
 
         self.vao.unbind()
         self.shader.unbind()

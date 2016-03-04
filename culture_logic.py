@@ -2,6 +2,7 @@ import signal
 import sys
 import time
 
+import numba
 import numpy as np
 import SharedArray as sa
 
@@ -10,38 +11,49 @@ import pymunk as pm
 
 max_creatures = 50
 
+@numba.jit
+def _find_first(vec, item):
+    for i in range(len(vec)):
+        if vec[i] == item:
+            return i
+    return -1
 
 class Culture(object):
     def __init__(self):
-        self.creature_data = sa.create('creature_data', (max_creatures, 7), dtype=np.float32)
+        self.creature_parts = sa.create('creature_parts', (max_creatures, 8), dtype=np.float32)
         # X POSITION, Y POSITION
-        self.creature_data[:, :2] = np.random.random((max_creatures, 2)).astype(np.float32)*20.0 - 10.0
+        self.creature_parts[:, :2] = (30.0, 30.0)#np.random.random((max_creatures, 2)).astype(np.float32)*20.0 - 10.0
         # ROTATION
-        self.creature_data[:, 2] = np.random.random(max_creatures).astype(np.float32)*2*np.pi - np.pi
+        self.creature_parts[:, 2] = np.random.random(max_creatures)*2*np.pi - np.pi
+        # SCALE
+        self.creature_parts[:, 3] = np.random.random(max_creatures)*0.9 + 1.0
         # TEXTURE INDEX
-        self.creature_data[:, 3] = np.random.randint(0, 10, max_creatures).astype(np.float32)
+        self.creature_parts[:, 4] = np.random.randint(0, 10, max_creatures)
         # COLOR ROTATION
-        self.creature_data[:, 4] = np.random.randint(0, 4, max_creatures).astype(np.float32)/4.0
+        self.creature_parts[:, 5] = np.random.randint(0, 4, max_creatures)/4.0
         # SATURATION
-        self.creature_data[:, 5] = np.random.randint(0, 5, max_creatures).astype(np.float32)/4.0
+        self.creature_parts[:, 6] = np.random.randint(0, 5, max_creatures)/4.0
         # ALPHA
-        self.creature_data[:, 6] = np.random.randint(1, 5, max_creatures).astype(np.float32)/4.0
+        self.creature_parts[:, 7] = np.random.randint(1, 5, max_creatures)/4.0
+
+        self.creature_data = np.zeros((max_creatures, 2))
 
         self.pm_space = pm.Space()
+        self.pm_space.damping = 0.9
         # self.pm_space.gravity = 0.0, -1.0
         self.pm_body = []
         self.pm_target = []
         self.pm_constraints = []
         for i in range(max_creatures):
-            body = pm.Body(10.0, 10.0)
-            body.position = tuple(self.creature_data[i, :2])
+            body = pm.Body(1.0, 10.0)
+            body.position = tuple(self.creature_parts[i, :2])
             self.pm_body.append(body)
 
             target = pm.Body(10.0, 10.0)
-            target.position = tuple(self.creature_data[i, :2] + (0.0, 5.0))
+            target.position = tuple(self.creature_parts[i, :2] + (0.0, 5.0))
             self.pm_target.append(target)
 
-            target_spring = pm.constraint.DampedSpring(body, target, (0.0, 0.8), (0.0, 0.0), 0.0, 10.0, 5.0)
+            target_spring = pm.constraint.DampedSpring(body, target, (0.0, 0.8), (0.0, 0.0), 0.0, 5.0, 15.0)
             self.pm_constraints.append(target_spring)
 
             self.pm_space.add([body, target_spring])
@@ -51,24 +63,38 @@ class Culture(object):
 
         #self.dt = p0.0
 
+    def add_creature(self):
+        print('adding creature')
+        ind = _find_first(self.creature_data[:, 0], 0.0)
+        if ind != -1:
+            new_pos = np.random.random(2)*20.0 - 10.0
+            print('at position: ', new_pos)
+            self.pm_body[ind].position = tuple(new_pos) #creature_data[ind, :2] = new_pos
+            self.pm_body[ind].reset_forces()
+            self.pm_body[ind].velocity = 0.0, 0.0
+            self.pm_target[ind].position = tuple(new_pos + (0.0, 0.8))
+            self.creature_data[ind] = 1.0
+
     def update(self, dt):
         self.ct = time.perf_counter()
-        if self.ct - self.prev_update > 2.0:
-            i = np.random.randint(0, max_creatures)
-            self.pm_target[i].position = tuple(np.random.random(2)*20.0 - 10.0)
+        if self.ct - self.prev_update > 5.0:
+            self.add_creature()
+            #i = np.random.randint(0, max_creatures)
+            #self.pm_target[i].position = tuple(np.random.random(2)*20.0 - 10.0)
             self.prev_update = self.ct
 
         self.pm_space.step(dt)
 
         for i in range(max_creatures):
-            self.creature_data[i, :2] = tuple(self.pm_body[i].position)
+            self.creature_parts[i, :2] = tuple(self.pm_body[i].position)
+            self.creature_parts[i, 2] = self.pm_body[i].angle
 
-        self.creature_data[:, 2] += dt
+        #self.creature_data[:, 2] += dt
 
     @staticmethod
     def cleanup():
         print('Cleaning up')
-        sa.delete('creature_data')
+        sa.delete('creature_parts')
 
 
 def main():
