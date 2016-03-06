@@ -28,47 +28,60 @@ def random_circle_point():
 class Culture(object):
     def __init__(self):
         try:
-            self.creature_parts = sa.create('creature_parts', (max_creatures, 8), dtype=np.float32)
+            self.creature_parts = sa.create('creature_parts', (max_creatures*3, 8), dtype=np.float32)
         except FileExistsError:
             sa.delete('creature_parts')
-            self.creature_parts = sa.create('creature_parts', (max_creatures, 8), dtype=np.float32)
+            self.creature_parts = sa.create('creature_parts', (max_creatures*3, 8), dtype=np.float32)
         # X POSITION, Y POSITION
         self.creature_parts[:, :2] = (30.0, 30.0)#np.random.random((max_creatures, 2)).astype(np.float32)*20.0 - 10.0
         # ROTATION
-        self.creature_parts[:, 2] = np.random.random(max_creatures)*2*np.pi - np.pi
+        self.creature_parts[:, 2] = np.random.random(max_creatures*3)*2*np.pi - np.pi
         # SCALE
-        self.creature_parts[:, 3] = np.random.random(max_creatures)*0.9 + 1.0
+        self.creature_parts[:, 3] = 0.5
         # TEXTURE INDEX
-        self.creature_parts[:, 4] = np.random.randint(0, 10, max_creatures)
+        self.creature_parts[:, 4] = np.random.randint(0, 10, max_creatures*3)
         # COLOR ROTATION
-        self.creature_parts[:, 5] = np.random.randint(0, 4, max_creatures)/4.0
+        self.creature_parts[:, 5] = np.random.randint(0, 4, max_creatures*3)/4.0
         # SATURATION
         self.creature_parts[:, 6] = 1.0
         # ALPHA
         self.creature_parts[:, 7] = 1.0
 
-        self.creature_data = np.zeros((max_creatures, 3))
+        self.creature_data = np.zeros((max_creatures, 4))
         self.creature_data[:, 1] = 1.0 # max_age
+        self.creature_data[:, 3] = 0.5 # creature size
 
         self.pm_space = pm.Space()
-        self.pm_space.damping = 0.9
+        self.pm_space.damping = 0.7
         # self.pm_space.gravity = 0.0, -1.0
         self.pm_body = []
+        self.pm_body_joint = []
         self.pm_target = []
         self.pm_target_spring = []
         for i in range(max_creatures):
-            body = pm.Body(10.0, 1.0)
-            body.position = tuple(self.creature_parts[i, :2])
-            self.pm_body.append(body)
+            head = pm.Body(10.0, 5.0)
+            head.position = tuple(self.creature_parts[i, :2])
+            mid = pm.Body(1.0, 1.0)
+            mid.position = head.position + (0.0, -1.0)
+            tail = pm.Body(1.0, 1.0)
+            tail.position = head.position + (0.0, -2.0)
+            self.pm_body.append([head, mid, tail])
+
+            head_mid_joint = pm.constraint.SlideJoint(head, mid, (0.0, -0.1), (0.0, 0.1), 0.1, 0.5)
+            mid_tail_joint = pm.constraint.SlideJoint(mid, tail, (0.0, -0.1), (0.0, 0.1), 0.1, 0.5)
+            self.pm_body_joint.append([head_mid_joint, mid_tail_joint])
 
             target = pm.Body(10.0, 10.0)
             target.position = tuple(self.creature_parts[i, :2] + (0.0, 5.0))
             self.pm_target.append(target)
 
-            target_spring = pm.constraint.DampedSpring(body, target, (0.0, 0.8), (0.0, 0.0), 0.0, 10.0, 15.0)
+            head_offset = pm.vec2d.Vec2d((0.0, 0.8)) * float(0.5)
+            target_spring = pm.constraint.DampedSpring(head, target, head_offset, (0.0, 0.0), 0.0, 10.0, 15.0)
             self.pm_target_spring.append(target_spring)
 
-            self.pm_space.add([body, target_spring])
+            self.pm_space.add([head, mid, tail])
+            self.pm_space.add([head_mid_joint, mid_tail_joint])
+            self.pm_space.add([target_spring])
 
         self.prev_update = time.perf_counter()
         self.ct = time.perf_counter()
@@ -79,14 +92,21 @@ class Culture(object):
         print('adding creature')
         ind = _find_first(self.creature_data[:, 0], 0.0)
         if ind != -1:
-            new_pos = np.random.random(2)*20.0 - 10.0
+            new_pos = pm.vec2d.Vec2d(tuple(np.random.random(2)*20.0 - 10.0))
             print('at position: ', new_pos)
-            self.pm_body[ind].position = tuple(new_pos) #creature_data[ind, :2] = new_pos
-            self.pm_body[ind].reset_forces()
-            self.pm_body[ind].velocity = 0.0, 0.0
-            self.pm_target[ind].position = self.pm_body[ind].position + (0.0, 0.8)
-            self.creature_data[ind, :] = [1.0, np.random.random(1)*10+1, 0.0]  # Alive, max_age, age
-            self.creature_parts[ind, 6] = 1.0
+            head_offset = pm.vec2d.Vec2d((0.0, 0.8)) * 0.5
+            self.pm_target[ind].position = new_pos + head_offset
+            self.pm_body[ind][0].position = new_pos #creature_data[ind, :2] = new_pos
+            self.pm_body[ind][1].position = new_pos + (0.0, -0.5)
+            self.pm_body[ind][2].position = new_pos + (0.0, -1.0)
+            for i in range(3):
+                self.pm_body[ind][i].reset_forces()
+                self.pm_body[ind][i].velocity = 0.0, 0.0
+                self.creature_parts[ind*3+i, 3] = 0.5  # size/scale
+                self.creature_parts[ind*3+i, 6] = 1.0
+
+            self.creature_data[ind, :] = [1.0, np.random.random(1)*10+10, 0.0, 0.5]  # Alive, max_age, age, size
+
 
     def update(self, dt):
         self.ct = time.perf_counter()
@@ -100,21 +120,22 @@ class Culture(object):
         max_age = self.creature_data[:, 1]
         cur_age = self.creature_data[:, 2]
         cur_age[:] += dt
-        self.creature_parts[:, 6] = np.clip(1.0 - (cur_age / max_age), 0.0, 1.0)
+        self.creature_parts[:, 6] = np.clip(1.0 - (cur_age / max_age), 0.0, 1.0).repeat(3)
         # dying_creatures = (alive == 1.0) & (cur_age > max_age)
-        self.creature_parts[:, 7] = np.clip(1.0 - (cur_age - max_age)/5.0, 0.0, 1.0)
+        self.creature_parts[:, 7] = np.clip(1.0 - (cur_age - max_age)/5.0, 0.0, 1.0).repeat(3)
         dead_creatures = (alive == 1.0) & (cur_age > max_age + 5.0)
         self.creature_data[dead_creatures, 0] = 0.0
-
 
         self.pm_space.step(dt)
 
         for i in range(max_creatures):
-            if alive[i] == 1.0 and (self.pm_body[i].position - (self.pm_target[i].position - (0.0, 0.8))).get_length() < 0.15:
+            head_offset = pm.vec2d.Vec2d((0.0, 0.8)) * 0.5
+            if alive[i] == 1.0 and \
+               (self.pm_body[i][0].position - (self.pm_target[i].position - head_offset)).get_length() < 2.0:
                 self.pm_target[i].position += random_circle_point()
-
-            self.creature_parts[i, :2] = tuple(self.pm_body[i].position)
-            self.creature_parts[i, 2] = self.pm_body[i].angle
+            for j in range(3):
+                self.creature_parts[3*i+j, :2] = tuple(self.pm_body[i][j].position)
+                self.creature_parts[3*i+j, 2] = self.pm_body[i][j].angle
 
         #self.creature_data[:, 2] += dt
 
