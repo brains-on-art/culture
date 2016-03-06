@@ -29,7 +29,7 @@ class Program(object):
             nonlocal running
             running = not running
 
-        print(sdl2.SDL_GL_GetSwapInterval())
+        #print(sdl2.SDL_GL_GetSwapInterval())
 
         self.event_manager.add_quit_callback(toggle_running)
         self.event_manager.add_keydown_callback(sdl2.SDLK_q, toggle_running)

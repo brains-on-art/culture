@@ -1,4 +1,5 @@
 import signal
+import subprocess
 import sys
 import time
 
@@ -18,9 +19,19 @@ def _find_first(vec, item):
             return i
     return -1
 
+@numba.jit(nopython=True)
+def random_circle_point():
+    theta = np.random.rand()*2*np.pi
+    x,y = 5*np.cos(theta), 5*np.sin(theta)
+    return x,y
+
 class Culture(object):
     def __init__(self):
-        self.creature_parts = sa.create('creature_parts', (max_creatures, 8), dtype=np.float32)
+        try:
+            self.creature_parts = sa.create('creature_parts', (max_creatures, 8), dtype=np.float32)
+        except FileExistsError:
+            sa.delete('creature_parts')
+            self.creature_parts = sa.create('creature_parts', (max_creatures, 8), dtype=np.float32)
         # X POSITION, Y POSITION
         self.creature_parts[:, :2] = (30.0, 30.0)#np.random.random((max_creatures, 2)).astype(np.float32)*20.0 - 10.0
         # ROTATION
@@ -44,9 +55,9 @@ class Culture(object):
         # self.pm_space.gravity = 0.0, -1.0
         self.pm_body = []
         self.pm_target = []
-        self.pm_constraints = []
+        self.pm_target_spring = []
         for i in range(max_creatures):
-            body = pm.Body(1.0, 10.0)
+            body = pm.Body(10.0, 1.0)
             body.position = tuple(self.creature_parts[i, :2])
             self.pm_body.append(body)
 
@@ -54,8 +65,8 @@ class Culture(object):
             target.position = tuple(self.creature_parts[i, :2] + (0.0, 5.0))
             self.pm_target.append(target)
 
-            target_spring = pm.constraint.DampedSpring(body, target, (0.0, 0.8), (0.0, 0.0), 0.0, 5.0, 15.0)
-            self.pm_constraints.append(target_spring)
+            target_spring = pm.constraint.DampedSpring(body, target, (0.0, 0.8), (0.0, 0.0), 0.0, 10.0, 15.0)
+            self.pm_target_spring.append(target_spring)
 
             self.pm_space.add([body, target_spring])
 
@@ -73,7 +84,7 @@ class Culture(object):
             self.pm_body[ind].position = tuple(new_pos) #creature_data[ind, :2] = new_pos
             self.pm_body[ind].reset_forces()
             self.pm_body[ind].velocity = 0.0, 0.0
-            self.pm_target[ind].position = tuple(new_pos + (0.0, 0.8))
+            self.pm_target[ind].position = self.pm_body[ind].position + (0.0, 0.8)
             self.creature_data[ind, :] = [1.0, np.random.random(1)*10+1, 0.0]  # Alive, max_age, age
             self.creature_parts[ind, 6] = 1.0
 
@@ -99,6 +110,9 @@ class Culture(object):
         self.pm_space.step(dt)
 
         for i in range(max_creatures):
+            if alive[i] == 1.0 and (self.pm_body[i].position - (self.pm_target[i].position - (0.0, 0.8))).get_length() < 0.15:
+                self.pm_target[i].position += random_circle_point()
+
             self.creature_parts[i, :2] = tuple(self.pm_body[i].position)
             self.creature_parts[i, 2] = self.pm_body[i].angle
 
@@ -113,6 +127,8 @@ class Culture(object):
 def main():
     culture = Culture()
 
+    gfx_p = subprocess.Popen(['python', 'main.py'])
+
     running = True
 
     def signal_handler(signal_number, frame):
@@ -126,6 +142,8 @@ def main():
     while running:
         culture.update(0.01)
         time.sleep(0.01)
+        if gfx_p.poll() == 0:
+            break
 
     culture.cleanup()
 
