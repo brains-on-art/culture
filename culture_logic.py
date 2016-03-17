@@ -47,9 +47,14 @@ class Culture(object):
         # ALPHA
         self.creature_parts[:, 7] = 1.0
 
-        self.creature_data = np.zeros((max_creatures, 4))
+        self.creature_data = np.zeros((max_creatures, 5))
         self.creature_data[:, 1] = 1.0 # max_age
         self.creature_data[:, 3] = 0.5 # creature size
+        self.creature_data[:, 4] = 1 # "mood" (state)
+        # Mood can have these possible values:
+        # 0 - Occupied in an interaction
+        # 1 - Default: follow target aimlessly
+        # 2 - ??
 
         self.pm_space = pm.Space()
         self.pm_space.damping = 0.7
@@ -89,11 +94,11 @@ class Culture(object):
         #self.dt = p0.0
 
     def add_creature(self):
-        print('adding creature')
+        # print('adding creature')
         ind = _find_first(self.creature_data[:, 0], 0.0)
         if ind != -1:
             new_pos = pm.vec2d.Vec2d(tuple(np.random.random(2)*20.0 - 10.0))
-            print('at position: ', new_pos)
+            # print('at position: ', new_pos)
             head_offset = pm.vec2d.Vec2d((0.0, 0.8)) * 0.5
             self.pm_target[ind].position = new_pos + head_offset
             self.pm_body[ind][0].position = new_pos #creature_data[ind, :2] = new_pos
@@ -102,15 +107,15 @@ class Culture(object):
             for i in range(3):
                 self.pm_body[ind][i].reset_forces()
                 self.pm_body[ind][i].velocity = 0.0, 0.0
-                self.creature_parts[ind*3+i, 3] = 0.5  # size/scale
+                self.creature_parts[ind*3+i, 3] = 0.5 - i*0.1  # size/scale
                 self.creature_parts[ind*3+i, 6] = 1.0
 
-            self.creature_data[ind, :] = [1.0, np.random.random(1)*10+10, 0.0, 0.5]  # Alive, max_age, age, size
+            self.creature_data[ind, :] = [1.0, np.random.random(1)*10+10, 0.0, 0.5, 1]  # Alive, max_age, age, size, mood
 
 
     def update(self, dt):
         self.ct = time.perf_counter()
-        if self.ct - self.prev_update > 5.0:
+        if self.ct - self.prev_update > 2.0:
             self.add_creature()
             #i = np.random.randint(0, max_creatures)
             #self.pm_target[i].position = tuple(np.random.random(2)*20.0 - 10.0)
@@ -120,9 +125,11 @@ class Culture(object):
         max_age = self.creature_data[:, 1]
         cur_age = self.creature_data[:, 2]
         cur_age[:] += dt
+        # set saturation according to age
         self.creature_parts[:, 6] = np.clip(1.0 - (cur_age / max_age), 0.0, 1.0).repeat(3)
-        # dying_creatures = (alive == 1.0) & (cur_age > max_age)
+
         self.creature_parts[:, 7] = np.clip(1.0 - (cur_age - max_age)/5.0, 0.0, 1.0).repeat(3)
+        # dying_creatures = (alive == 1.0) & (cur_age > max_age)
         dead_creatures = (alive == 1.0) & (cur_age > max_age + 5.0)
         self.creature_data[dead_creatures, 0] = 0.0
 
@@ -138,6 +145,33 @@ class Culture(object):
                 self.creature_parts[3*i+j, 2] = self.pm_body[i][j].angle
 
         #self.creature_data[:, 2] += dt
+        collisions = self.get_collision_matrix()
+        # print(sum(collisions.flatten() != 0))
+        # print(collisions)
+
+    def get_collision_matrix(self):
+        collisions = np.zeros((max_creatures, max_creatures))
+        alive = self.creature_data[:, 0]
+        x = self.creature_parts[:, 0]
+        y = self.creature_parts[:, 1]
+        scale = self.creature_parts[:, 3]
+        for i in range(max_creatures):
+            for j in range(max_creatures):
+
+                if (not alive[i] or not alive[j]) or i == j:
+                    collisions[i,j] = False
+                    continue
+
+                xdist = x[3*i] - x[3*j]
+                ydist = y[3*i] - y[3*j]
+
+                squaredist = np.sqrt((xdist * xdist) + (ydist * ydist))
+                collisions[i,j] = squaredist
+                colliding = squaredist <= scale[3*i] + scale[3*j]
+                if colliding:
+                    print(i,j)
+                # collisions[i,j] = squaredist <= scale[3*i] + scale[3*j]
+        return collisions
 
     @staticmethod
     def cleanup():
