@@ -107,7 +107,8 @@ class Culture(object):
             for i in range(3):
                 self.pm_body[ind][i].reset_forces()
                 self.pm_body[ind][i].velocity = 0.0, 0.0
-                self.creature_parts[ind*3+i, 3] = 0.5 - i*0.1  # size/scale
+                # self.creature_parts[ind*3+i, 3] = 0.5 # size/scale
+                self.creature_parts[ind*3+i, 3] = 1.0 - i*0.3  # size/scale
                 self.creature_parts[ind*3+i, 6] = 1.0
 
             self.creature_data[ind, :] = [1.0, np.random.random(1)*10+10, 0.0, 0.5, 1]  # Alive, max_age, age, size, mood
@@ -143,11 +144,18 @@ class Culture(object):
             for j in range(3):
                 self.creature_parts[3*i+j, :2] = tuple(self.pm_body[i][j].position)
                 self.creature_parts[3*i+j, 2] = self.pm_body[i][j].angle
+            #colliding? change color
+            if not self.creature_data[i, 4]:
+                self.creature_parts[3*i, 5] = np.random.randint(0, 5)/4.0
 
         #self.creature_data[:, 2] += dt
+
         collisions = self.get_collision_matrix()
-        # print(sum(collisions.flatten() != 0))
-        # print(collisions)
+        in_collision = np.nonzero([sum(i) for i in collisions])[0]
+        if in_collision.any():
+            print('colliding: ', in_collision)
+            for ind in range(max_creatures):
+                self.creature_data[ind, 4] = 0 if ind in in_collision else 1
 
     def get_collision_matrix(self):
         collisions = np.zeros((max_creatures, max_creatures))
@@ -155,10 +163,13 @@ class Culture(object):
         x = self.creature_parts[:, 0]
         y = self.creature_parts[:, 1]
         scale = self.creature_parts[:, 3]
+        # we only need one half of the matrix separated by the diagonal, but
+        # we still compute the whole thing D:
         for i in range(max_creatures):
             for j in range(max_creatures):
 
-                if (not alive[i] or not alive[j]) or i == j:
+                # don't collide with self or if you're dead
+                if i == j or (not alive[i] or not alive[j]):
                     collisions[i,j] = False
                     continue
 
@@ -166,11 +177,8 @@ class Culture(object):
                 ydist = y[3*i] - y[3*j]
 
                 squaredist = np.sqrt((xdist * xdist) + (ydist * ydist))
-                collisions[i,j] = squaredist
-                colliding = squaredist <= scale[3*i] + scale[3*j]
-                if colliding:
-                    print(i,j)
-                # collisions[i,j] = squaredist <= scale[3*i] + scale[3*j]
+                collisions[i,j] = squaredist <= scale[3*i] + scale[3*j]
+
         return collisions
 
     @staticmethod
