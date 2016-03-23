@@ -11,7 +11,7 @@ sys.path.append('./pymunk')
 import pymunk as pm
 
 max_creatures = 50
-refractory_period = 3 #s
+refractory_period = 10 #s
 
 @numba.jit
 def _find_first(vec, item):
@@ -168,8 +168,9 @@ class Culture(object):
             # MOVE
             head_offset = pm.vec2d.Vec2d((0.0, 0.8)) * 0.5
             # head_offset = pm.vec2d.Vec2d((0.0, 0.8))
-            if alive[i] == 1.0 and \
-               (self.pm_body[i][0].position - (self.pm_target[i].position - head_offset)).get_length() < 4.2:
+            # if alive[i] == 1.0 and \
+            #    (self.pm_body[i][0].position - (self.pm_target[i].position - head_offset)).get_length() < 4.2:
+            if alive[i] == 1.0 and self.pm_body[i][0].velocity.get_length() < 0.1:
                 self.pm_target[i].position += random_circle_point()
             elif not alive[i]:
                 self.pm_target[i].position = self.pm_body[i][0].position
@@ -211,11 +212,6 @@ class Culture(object):
             self.resolve_aggr_check(ind, other)
 
             # either belligerent(?) wants to sex?
-            # if (self.creature_data[ind, 7] >= 0.5) or (self.creature_data[other, 7] >= 0.5):
-            #     # print('at least one wants to sex: {0} mojo={1}, {2} mojo={3}'.format(ind, self.creature_data[ind, 7], other, self.creature_data[other, 7]))
-            #     self.creature_data[[ind, other], 5] = self.ct
-            #     self.creature_data[[ind, other], 4] = 1
-            #     continue
             self.resolve_mating_check(ind, other)
 
     def is_occupied(self, arr_like):
@@ -226,8 +222,8 @@ class Culture(object):
 
     def resolve_mating_check(self, a, b):
         mojo = self.creature_data[:, 7]
-        if (mojo[[a,b]] > 0.4).any():
-            # print('at least one wants to sex: {0} mojo={1:.4f}, {2} mojo={3:.4f}'.format(a, mojo[a], b, mojo[b]))
+        alive = self.creature_data[:, 0]
+        if alive[[a,b]].all() and (mojo[[a,b]] > 0.4).any():
             print('these two had sex: {0} mojo={1:.4f}, {2} mojo={3:.4f}, and they produced a new one'.format(a, mojo[a], b, mojo[b]))
             self.add_creature(self.pm_body[a][0].position)
             self.creature_data[[a,b],5] = self.ct
@@ -240,8 +236,7 @@ class Culture(object):
         if max(aggr[[a,b]]) < 0.7: #neither wants to fight
             self.creature_data[[a,b],5] = self.ct
             print('neither {0} nor {1} wanted a fight'.format(a,b))
-            return
-        # elif (aggr[[a,b]] > 0.5).any(): #FIGHT
+
         else: #FIGHT
             print('at least one wants to fight: {0} aggr={1:.4f}, {2} aggr={3:.4f}'.format(a, aggr[a], b, aggr[b]))
             a_dmg = power[a] - toughness[b]
@@ -250,16 +245,15 @@ class Culture(object):
             # we do it by setting max age to be current age
             if a_dmg < b_dmg:
                 self.creature_data[a, 1] = self.creature_data[a, 2]
-                self.creature_data[a, 0] # blarg im dead
+                self.creature_data[a, 0]  = 0 # blarg im dead
                 self.creature_data[[a,b],5] = self.ct
                 print('{0} killed {1}!'.format(b,a))
-                return
+
             else:
                 self.creature_data[b, 1] = self.creature_data[b, 2]
-                self.creature_data[b, 0] # blarg im dead
+                self.creature_data[b, 0] = 0 # blarg im dead
                 self.creature_data[[a,b],5] = self.ct
                 print('{0} killed {1}!'.format(a,b))
-                return
 
     def get_collision_matrix(self):
         collisions = np.zeros((max_creatures, max_creatures))
