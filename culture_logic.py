@@ -11,6 +11,7 @@ sys.path.append('./pymunk')
 import pymunk as pm
 
 max_creatures = 50
+refractory_period = 3 #s
 
 @numba.jit
 def _find_first(vec, item):
@@ -47,14 +48,26 @@ class Culture(object):
         # ALPHA
         self.creature_parts[:, 7] = 1.0
 
-        self.creature_data = np.zeros((max_creatures, 5))
+        self.creature_data = np.zeros((max_creatures, 11))
+        # self.creature_data[:, 0] = 0 # alive
         self.creature_data[:, 1] = 1.0 # max_age
+        # self.creature_data[:, 2] = 0 # cur_age
         self.creature_data[:, 3] = 0.5 # creature size
+
         self.creature_data[:, 4] = 1 # "mood" (state)
         # Mood can have these possible values:
+        # -2 - Occupied in a sex
+        # -1 - Occupied in a fight
         # 0 - Occupied in an interaction
         # 1 - Default: follow target aimlessly
         # 2 - ??
+
+        # self.creature_data[:, 5] = 0 # ts last collided
+        # self.creature_data[:, 6] = 0 # agility
+        # self.creature_data[:, 7] = 0 # mojo
+        # self.creature_data[:, 8] = 0 # aggressiveness
+        # self.creature_data[:, 9] = 0 # power
+        # self.creature_data[:, 10] = 0 # toughness
 
         self.pm_space = pm.Space()
         self.pm_space.damping = 0.7
@@ -91,13 +104,17 @@ class Culture(object):
         self.prev_update = time.perf_counter()
         self.ct = time.perf_counter()
 
+        self.refractory_period = refractory_period
         #self.dt = p0.0
 
-    def add_creature(self):
+    def add_creature(self, pos=None):
         # print('adding creature')
         ind = _find_first(self.creature_data[:, 0], 0.0)
         if ind != -1:
-            new_pos = pm.vec2d.Vec2d(tuple(np.random.random(2)*20.0 - 10.0))
+            if not pos:
+                new_pos = pm.vec2d.Vec2d(tuple(np.random.random(2)*20.0 - 10.0))
+            else:
+                new_pos = pm.vec2d.Vec2d(pos)
             # print('at position: ', new_pos)
             head_offset = pm.vec2d.Vec2d((0.0, 0.8)) * 0.5
             self.pm_target[ind].position = new_pos + head_offset
@@ -108,15 +125,27 @@ class Culture(object):
                 self.pm_body[ind][i].reset_forces()
                 self.pm_body[ind][i].velocity = 0.0, 0.0
                 # self.creature_parts[ind*3+i, 3] = 0.5 # size/scale
-                self.creature_parts[ind*3+i, 3] = 1.0 - i*0.3  # size/scale
+                self.creature_parts[ind*3+i, 3] = 1 - i*0.2  # size/scale
                 self.creature_parts[ind*3+i, 6] = 1.0
 
-            self.creature_data[ind, :] = [1.0, np.random.random(1)*10+10, 0.0, 0.5, 1]  # Alive, max_age, age, size, mood
+            self.creature_data[ind, :] = [1.0, # Alive
+                                        np.random.random(1)*180+180, # max_age
+                                        0.0, # age
+                                        0.5, # size
+                                        1, # mood
+                                        # time.perf_counter(), # lastcollided
+                                        0.0, # lastcollided
+                                        np.random.random(), # agility
+                                        np.random.random(), # mojo
+                                        np.random.random(), # aggressiveness
+                                        np.random.random(), # power
+                                        np.random.random()]  # toughness
 
 
     def update(self, dt):
         self.ct = time.perf_counter()
-        if self.ct - self.prev_update > 2.0:
+        # add creatures every x seconds
+        if self.ct - self.prev_update > 3.0:
             self.add_creature()
             #i = np.random.randint(0, max_creatures)
             #self.pm_target[i].position = tuple(np.random.random(2)*20.0 - 10.0)
@@ -126,9 +155,8 @@ class Culture(object):
         max_age = self.creature_data[:, 1]
         cur_age = self.creature_data[:, 2]
         cur_age[:] += dt
-        # set saturation according to age
+        # set saturation and alpha according to age
         self.creature_parts[:, 6] = np.clip(1.0 - (cur_age / max_age), 0.0, 1.0).repeat(3)
-
         self.creature_parts[:, 7] = np.clip(1.0 - (cur_age - max_age)/5.0, 0.0, 1.0).repeat(3)
         # dying_creatures = (alive == 1.0) & (cur_age > max_age)
         dead_creatures = (alive == 1.0) & (cur_age > max_age + 5.0)
@@ -137,25 +165,101 @@ class Culture(object):
         self.pm_space.step(dt)
 
         for i in range(max_creatures):
+            # MOVE
             head_offset = pm.vec2d.Vec2d((0.0, 0.8)) * 0.5
+            # head_offset = pm.vec2d.Vec2d((0.0, 0.8))
             if alive[i] == 1.0 and \
-               (self.pm_body[i][0].position - (self.pm_target[i].position - head_offset)).get_length() < 2.0:
+               (self.pm_body[i][0].position - (self.pm_target[i].position - head_offset)).get_length() < 4.2:
                 self.pm_target[i].position += random_circle_point()
+            elif not alive[i]:
+                self.pm_target[i].position = self.pm_body[i][0].position
+            # if alive[i] == 1:
+                # print((self.pm_body[i][0].position - (self.pm_target[i].position - head_offset)).get_length())
+                # if ((self.pm_body[i][0].position - (self.pm_target[i].position - head_offset)).get_length() < 6):
+                    # self.pm_target[i].position += random_circle_point()
             for j in range(3):
                 self.creature_parts[3*i+j, :2] = tuple(self.pm_body[i][j].position)
                 self.creature_parts[3*i+j, 2] = self.pm_body[i][j].angle
-            #colliding? change color
-            if not self.creature_data[i, 4]:
-                self.creature_parts[3*i, 5] = np.random.randint(0, 5)/4.0
 
         #self.creature_data[:, 2] += dt
 
         collisions = self.get_collision_matrix()
         in_collision = np.nonzero([sum(i) for i in collisions])[0]
         if in_collision.any():
-            print('colliding: ', in_collision)
-            for ind in range(max_creatures):
-                self.creature_data[ind, 4] = 0 if ind in in_collision else 1
+            # print(in_collision)
+            #set moods: 0 for colliding and 1 for all others
+            self.creature_data[in_collision, 4] = 0
+            self.creature_data[np.setdiff1d(np.arange(max_creatures),in_collision), 4] = 1
+
+            #modify colliders' alpha to see them
+            self.creature_parts[3*in_collision, 7] = 0.2
+
+        # interactions: check all creatures occupied in collision
+        for ind in (self.creature_data[:, 4] == 0).nonzero()[0]:
+            # who is everyone colliding with?
+            other = collisions[ind].nonzero()[0]
+            if not other.any():
+                continue
+
+            other = other[0] #FIXME only consider the first if many are colliding with this one
+
+            # is either or both the belligerents occupied or resting?
+            if self.is_occupied([ind, other]) or self.is_on_refractory_period([ind, other]):
+                continue
+
+            # does either belligerent want to fight?
+            self.resolve_aggr_check(ind, other)
+
+            # either belligerent(?) wants to sex?
+            # if (self.creature_data[ind, 7] >= 0.5) or (self.creature_data[other, 7] >= 0.5):
+            #     # print('at least one wants to sex: {0} mojo={1}, {2} mojo={3}'.format(ind, self.creature_data[ind, 7], other, self.creature_data[other, 7]))
+            #     self.creature_data[[ind, other], 5] = self.ct
+            #     self.creature_data[[ind, other], 4] = 1
+            #     continue
+            self.resolve_mating_check(ind, other)
+
+    def is_occupied(self, arr_like):
+        return (self.creature_data[arr_like, 4] < 0).any()
+
+    def is_on_refractory_period(self, arr_like):
+        return np.array([(self.ct - self.creature_data[r, 5] < self.refractory_period) for r in arr_like]).any()
+
+    def resolve_mating_check(self, a, b):
+        mojo = self.creature_data[:, 7]
+        if (mojo[[a,b]] > 0.4).any():
+            # print('at least one wants to sex: {0} mojo={1:.4f}, {2} mojo={3:.4f}'.format(a, mojo[a], b, mojo[b]))
+            print('these two had sex: {0} mojo={1:.4f}, {2} mojo={3:.4f}, and they produced a new one'.format(a, mojo[a], b, mojo[b]))
+            self.add_creature(self.pm_body[a][0].position)
+            self.creature_data[[a,b],5] = self.ct
+        return
+
+    def resolve_aggr_check(self, a, b):
+        aggr = self.creature_data[:, 8]
+        power = self.creature_data[:, 9]
+        toughness = self.creature_data[:, 10]
+        if max(aggr[[a,b]]) < 0.7: #neither wants to fight
+            self.creature_data[[a,b],5] = self.ct
+            print('neither {0} nor {1} wanted a fight'.format(a,b))
+            return
+        # elif (aggr[[a,b]] > 0.5).any(): #FIGHT
+        else: #FIGHT
+            print('at least one wants to fight: {0} aggr={1:.4f}, {2} aggr={3:.4f}'.format(a, aggr[a], b, aggr[b]))
+            a_dmg = power[a] - toughness[b]
+            b_dmg = power[b] - toughness[a]
+            # someone has to die
+            # we do it by setting max age to be current age
+            if a_dmg < b_dmg:
+                self.creature_data[a, 1] = self.creature_data[a, 2]
+                self.creature_data[a, 0] # blarg im dead
+                self.creature_data[[a,b],5] = self.ct
+                print('{0} killed {1}!'.format(b,a))
+                return
+            else:
+                self.creature_data[b, 1] = self.creature_data[b, 2]
+                self.creature_data[b, 0] # blarg im dead
+                self.creature_data[[a,b],5] = self.ct
+                print('{0} killed {1}!'.format(a,b))
+                return
 
     def get_collision_matrix(self):
         collisions = np.zeros((max_creatures, max_creatures))
@@ -165,6 +269,7 @@ class Culture(object):
         scale = self.creature_parts[:, 3]
         # we only need one half of the matrix separated by the diagonal, but
         # we still compute the whole thing D:
+        # NVM RETURNING THE PART UNDER THE DIAGONAL
         for i in range(max_creatures):
             for j in range(max_creatures):
 
