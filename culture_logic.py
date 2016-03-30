@@ -1,4 +1,5 @@
 import signal
+import zmq
 import subprocess
 import sys
 import time
@@ -10,6 +11,7 @@ import SharedArray as sa
 sys.path.append('./pymunk')
 import pymunk as pm
 
+zmq_port = '5556'
 max_creatures = 50
 refractory_period = 10 #s
 
@@ -107,14 +109,16 @@ class Culture(object):
         self.refractory_period = refractory_period
         #self.dt = p0.0
 
-    def add_creature(self, pos=None):
-        # print('adding creature')
+    def add_creature(self, x=None, y=None, pos=None):
+        print('adding creature at ', x, y, pos)
         ind = _find_first(self.creature_data[:, 0], 0.0)
         if ind != -1:
-            if not pos:
-                new_pos = pm.vec2d.Vec2d(tuple(np.random.random(2)*20.0 - 10.0))
-            else:
+            if pos:
                 new_pos = pm.vec2d.Vec2d(pos)
+            elif (x and y):
+                new_pos = pm.vec2d.Vec2d((float(x), float(y)))
+            else:
+                new_pos = pm.vec2d.Vec2d(tuple(np.random.random(2)*20.0 - 10.0))
             # print('at position: ', new_pos)
             head_offset = pm.vec2d.Vec2d((0.0, 0.8)) * 0.5
             self.pm_target[ind].position = new_pos + head_offset
@@ -139,17 +143,17 @@ class Culture(object):
                                         np.random.random(), # mojo
                                         np.random.random(), # aggressiveness
                                         np.random.random(), # power
-                                        np.random.random()]  # toughness
+                                        np.random.random()] # toughness
 
 
     def update(self, dt):
         self.ct = time.perf_counter()
         # add creatures every x seconds
-        if self.ct - self.prev_update > 3.0:
-            self.add_creature()
-            #i = np.random.randint(0, max_creatures)
-            #self.pm_target[i].position = tuple(np.random.random(2)*20.0 - 10.0)
-            self.prev_update = self.ct
+        # if self.ct - self.prev_update > 3.0:
+        #     self.add_creature()
+        #     #i = np.random.randint(0, max_creatures)
+        #     #self.pm_target[i].position = tuple(np.random.random(2)*20.0 - 10.0)
+        #     self.prev_update = self.ct
 
         alive = self.creature_data[:, 0]
         max_age = self.creature_data[:, 1]
@@ -197,14 +201,15 @@ class Culture(object):
 
         # interactions: check all creatures occupied in collision
         for ind in (self.creature_data[:, 4] == 0).nonzero()[0]:
-            # who is everyone colliding with?
+            # who am i colliding with?
             other = collisions[ind].nonzero()[0]
             if not other.any():
                 continue
 
-            other = other[0] #FIXME only consider the first if many are colliding with this one
+            # FIXME do something fancy here?
+            other = other[0] # only consider the first if many are colliding with this one
 
-            # is either or both the belligerents occupied or resting?
+            # is either or both the belligerents occupied or recovering?
             if self.is_occupied([ind, other]) or self.is_on_refractory_period([ind, other]):
                 continue
 
@@ -225,7 +230,7 @@ class Culture(object):
         alive = self.creature_data[:, 0]
         if alive[[a,b]].all() and (mojo[[a,b]] > 0.4).any():
             print('these two had sex: {0} mojo={1:.4f}, {2} mojo={3:.4f}, and they produced a new one'.format(a, mojo[a], b, mojo[b]))
-            self.add_creature(self.pm_body[a][0].position)
+            self.add_creature(pos=self.pm_body[a][0].position)
             self.creature_data[[a,b],5] = self.ct
         return
 
@@ -263,7 +268,6 @@ class Culture(object):
         scale = self.creature_parts[:, 3]
         # we only need one half of the matrix separated by the diagonal, but
         # we still compute the whole thing D:
-        # NVM RETURNING THE PART UNDER THE DIAGONAL
         for i in range(max_creatures):
             for j in range(max_creatures):
 
@@ -298,11 +302,28 @@ def main():
         nonlocal running
         running = False
 
+
     signal.signal(signal.SIGINT, signal_handler)
     print('Press Ctrl+C to quit')
 
+    context = zmq.Context()
+    socket = context.socket(zmq.REP)
+    socket.bind('tcp://*:5556')
+
     while running:
+        try:
+            message = socket.recv_string(zmq.NOBLOCK)
+            x,y = message.split()
+            culture.add_creature(x,y)
+            socket.send_string('OK', zmq.NOBLOCK)
+        except zmq.error.Again:
+            pass # no messages from sensor stations
+        except:
+            print("I don't know what happened: ", sys.exc_info()[0])
+            raise
+
         culture.update(0.01)
+
         time.sleep(0.01)
         if gfx_p.poll() == 0:
             break
