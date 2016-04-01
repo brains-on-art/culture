@@ -228,7 +228,7 @@ class Culture(object):
     def resolve_mating_check(self, a, b):
         mojo = self.creature_data[:, 7]
         alive = self.creature_data[:, 0]
-        if alive[[a,b]].all() and (mojo[[a,b]] > 0.4).any():
+        if alive[[a,b]].all() and (mojo[[a,b]] > 0.6).any():
             print('these two had sex: {0} mojo={1:.4f}, {2} mojo={3:.4f}, and they produced a new one'.format(a, mojo[a], b, mojo[b]))
             self.add_creature(pos=self.pm_body[a][0].position)
             self.creature_data[[a,b],5] = self.ct
@@ -238,7 +238,7 @@ class Culture(object):
         aggr = self.creature_data[:, 8]
         power = self.creature_data[:, 9]
         toughness = self.creature_data[:, 10]
-        if max(aggr[[a,b]]) < 0.7: #neither wants to fight
+        if max(aggr[[a,b]]) < 0.6: #neither wants to fight
             self.creature_data[[a,b],5] = self.ct
             print('neither {0} nor {1} wanted a fight'.format(a,b))
 
@@ -246,19 +246,14 @@ class Culture(object):
             print('at least one wants to fight: {0} aggr={1:.4f}, {2} aggr={3:.4f}'.format(a, aggr[a], b, aggr[b]))
             a_dmg = power[a] - toughness[b]
             b_dmg = power[b] - toughness[a]
-            # someone has to die
+            # only one can walk away from this
+            winner = a if a_dmg > b_dmg else b
+            loser = b if winner == a else a
             # we do it by setting max age to be current age
-            if a_dmg < b_dmg:
-                self.creature_data[a, 1] = self.creature_data[a, 2]
-                self.creature_data[a, 0]  = 0 # blarg im dead
-                self.creature_data[[a,b],5] = self.ct
-                print('{0} killed {1}!'.format(b,a))
-
-            else:
-                self.creature_data[b, 1] = self.creature_data[b, 2]
-                self.creature_data[b, 0] = 0 # blarg im dead
-                self.creature_data[[a,b],5] = self.ct
-                print('{0} killed {1}!'.format(a,b))
+            self.creature_data[loser, 1] = self.creature_data[loser, 2]
+            self.creature_data[loser, 0]  = 0 # blarg im dead
+            self.creature_data[[a,b],5] = self.ct
+            print('{0} killed {1}!'.format(winner,loser))
 
     def get_collision_matrix(self):
         collisions = np.zeros((max_creatures, max_creatures))
