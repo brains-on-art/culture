@@ -103,6 +103,27 @@ class Culture(object):
             self.pm_space.add([head_mid_joint, mid_tail_joint])
             self.pm_space.add([target_spring])
 
+            shape = pm.Circle(head, self.creature_parts[0,3]) # use the scale of the first creature part
+            # shape.sensor = True
+            shape.collision_type = 1
+            self.pm_space.add(shape)
+
+        # def printcolliders(space, arbiter):
+        #     print([s.body for s in arbiter.shapes])
+        #     return True
+        #
+        # self.pm_space.add_collision_handler(1, 2, pre_solve=printcolliders)
+
+        # add some walls
+        walls = [pm.Segment(self.pm_space.static_body, (-13, 13), (13, 13), 0.1)
+                ,pm.Segment(self.pm_space.static_body, (13, 13), (13, -13), 0.1)
+                ,pm.Segment(self.pm_space.static_body, (13, -13), (-13, -13), 0.1)
+                ,pm.Segment(self.pm_space.static_body, (-13, -13), (-13, 13), 0.1)
+                ]
+        for wall in walls:
+            wall.collision_type = 2
+        self.pm_space.add(walls)
+
         self.prev_update = time.perf_counter()
         self.ct = time.perf_counter()
 
@@ -178,10 +199,7 @@ class Culture(object):
                 self.pm_target[i].position += random_circle_point()
             elif not alive[i]:
                 self.pm_target[i].position = self.pm_body[i][0].position
-            # if alive[i] == 1:
-                # print((self.pm_body[i][0].position - (self.pm_target[i].position - head_offset)).get_length())
-                # if ((self.pm_body[i][0].position - (self.pm_target[i].position - head_offset)).get_length() < 6):
-                    # self.pm_target[i].position += random_circle_point()
+
             for j in range(3):
                 self.creature_parts[3*i+j, :2] = tuple(self.pm_body[i][j].position)
                 self.creature_parts[3*i+j, 2] = self.pm_body[i][j].angle
@@ -252,6 +270,10 @@ class Culture(object):
             # we do it by setting max age to be current age
             self.creature_data[loser, 1] = self.creature_data[loser, 2]
             self.creature_data[loser, 0]  = 0 # blarg im dead
+
+            # try to stop the dead thing from moving: set target pos = creature pos
+            self.pm_target[loser].position = self.pm_body[loser][0].position
+
             self.creature_data[[a,b],5] = self.ct
             print('{0} killed {1}!'.format(winner,loser))
 
