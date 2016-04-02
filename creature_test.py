@@ -10,7 +10,8 @@ import SharedArray as sa
 sys.path.append('./pymunk')
 import pymunk as pm
 
-max_creatures = 50
+max_creatures = 9
+part_per_creature = 5
 
 @numba.jit
 def _find_first(vec, item):
@@ -23,48 +24,36 @@ def _find_first(vec, item):
 def random_circle_point():
     theta = np.random.rand()*2*np.pi
     x,y = 5*np.cos(theta), 5*np.sin(theta)
-    return x,y
+    return x, y
+
 
 class Culture(object):
     def __init__(self):
+        # Create creature parts array to share with visualization
         try:
-            self.creature_parts = sa.create('creature_parts', (max_creatures*3, 12), dtype=np.float32)
+            self.creature_parts = sa.create('creature_parts', (max_creatures*part_per_creature, 12), dtype=np.float32)
         except FileExistsError:
             sa.delete('creature_parts')
-            self.creature_parts = sa.create('creature_parts', (max_creatures*3, 12), dtype=np.float32)
-        # X POSITION, Y POSITION
-        self.creature_parts[:, :2] = (30.0, 30.0)#np.random.random((max_creatures, 2)).astype(np.float32)*20.0 - 10.0
-        # ROTATION
-        self.creature_parts[:, 2] = np.random.random(max_creatures*3)*2*np.pi - np.pi
-        # SCALE
-        self.creature_parts[:, 3] = 0.5
-        # TEXTURE INDEX
-        self.creature_parts[:, 4] = np.random.randint(0, 10, max_creatures*3)
-        # COLOR ROTATION
-        self.creature_parts[:, 5] = np.random.randint(0, 4, max_creatures*3)/4.0
-        # SATURATION
-        self.creature_parts[:, 6] = 1.0
-        # ALPHA
-        self.creature_parts[:, 7] = 1.0
-        # TIME OFFSET (FOR ANIMATION
-        self.creature_parts[:, 8] = np.random.random(max_creatures).repeat(3)*2*np.pi
-        self.creature_parts[1::3, 8] += 0.4
-        self.creature_parts[2::3, 8] += 0.8
+            self.creature_parts = sa.create('creature_parts', (max_creatures*part_per_creature, 12), dtype=np.float32)
 
-        # BEAT ANIMATION FREQUENCY
-        self.creature_parts[:, 9] = 2.0
-        # SWIRL ANIMATON RADIUS
-        self.creature_parts[:, 10] = 2.3
-        # SWIRL ANIMATION FREQUENCY
-        self.creature_parts[:, 11] = 1.0
-
+        # Creature data holds
         self.creature_data = np.zeros((max_creatures, 4))
-        self.creature_data[:, 1] = 1.0 # max_age
-        self.creature_data[:, 3] = 0.5 # creature size
+        self.creature_data[:, 1] = 100.0  # max_age
+        self.creature_data[:, 3] = 0.5  # creature size
+
+        #
+        physics_skeleton = {'active': False,
+                            'target': None,
+                            'body': None,
+                            'constraints': None}
+        self.creature_physics = [physics_skeleton.copy() for x in range(max_creatures)]
 
         self.pm_space = pm.Space()
         self.pm_space.damping = 0.4
         # self.pm_space.gravity = 0.0, -1.0
+
+        self.init_creatures()
+
         self.pm_body = []
         self.pm_body_joint = []
         self.pm_target = []
@@ -98,7 +87,39 @@ class Culture(object):
         self.prev_update = time.perf_counter()
         self.ct = time.perf_counter()
 
-        #self.dt = p0.0
+        # self.dt = p0.0
+
+    def init_creatures(self):
+        # X POSITION, Y POSITION
+        a = [-6, 0, 6]
+        x, y = np.meshgrid(a, a)
+        self.creature_parts[:, :2] = np.vstack([x.flatten(), y.flatten()]).T.repeat(5, axis=0)
+        # ROTATION
+        self.creature_parts[:, 2] = np.random.random(max_creatures*5)*2*np.pi - np.pi
+        # SCALE
+        self.creature_parts[:, 3] = 0.5
+        # TEXTURE INDEX
+        self.creature_parts[:, 4] = np.random.randint(0, 10, max_creatures*5)
+        # COLOR ROTATION
+        self.creature_parts[:, 5] = np.random.randint(0, 4, max_creatures*5)/4.0  # FIXME: 0, 30, -30, -60 deg ei punaisia!
+        # SATURATION
+        self.creature_parts[:, 6] = 1.0
+        # ALPHA
+        self.creature_parts[:, 7] = 1.0
+        # TIME OFFSET (FOR ANIMATION
+        self.creature_parts[:, 8] = np.random.random(max_creatures).repeat(5)*2*np.pi
+        self.creature_parts[1::3, 8] += 0.4
+        self.creature_parts[2::3, 8] += 0.8
+
+        # BEAT ANIMATION FREQUENCY
+        self.creature_parts[:, 9] = 2.0
+        # SWIRL ANIMATON RADIUS
+        self.creature_parts[:, 10] = 2.3
+        # SWIRL ANIMATION FREQUENCY
+        self.creature_parts[:, 11] = 1.0
+
+        for i in range(9):
+            pass
 
     def add_creature(self, type=None):
         if type is None:
@@ -128,32 +149,32 @@ class Culture(object):
 
     def update(self, dt):
         self.ct = time.perf_counter()
-        if self.ct - self.prev_update > 5.0:
-            self.add_creature()
+        #if self.ct - self.prev_update > 5.0:
+        #    self.add_creature()
             #i = np.random.randint(0, max_creatures)
             #self.pm_target[i].position = tuple(np.random.random(2)*20.0 - 10.0)
-            self.prev_update = self.ct
+        #    self.prev_update = self.ct
 
         alive = self.creature_data[:, 0]
         max_age = self.creature_data[:, 1]
         cur_age = self.creature_data[:, 2]
         cur_age[:] += dt
-        self.creature_parts[:, 6] = np.clip(1.0 - (cur_age / max_age), 0.0, 1.0).repeat(3)
+        self.creature_parts[:, 6] = np.clip(1.0 - (cur_age / max_age), 0.0, 1.0).repeat(5)
         # dying_creatures = (alive == 1.0) & (cur_age > max_age)
-        self.creature_parts[:, 7] = np.clip(1.0 - (cur_age - max_age)/5.0, 0.0, 1.0).repeat(3)
+        self.creature_parts[:, 7] = np.clip(1.0 - (cur_age - max_age)/5.0, 0.0, 1.0).repeat(5)
         dead_creatures = (alive == 1.0) & (cur_age > max_age + 5.0)
         self.creature_data[dead_creatures, 0] = 0.0
 
         self.pm_space.step(dt)
 
-        for i in range(max_creatures):
-            head_offset = pm.vec2d.Vec2d((0.0, 0.8)) * 0.5
-            if alive[i] == 1.0 and \
-               (self.pm_body[i][0].position - (self.pm_target[i].position - head_offset)).get_length() < 2.0:
-                self.pm_target[i].position += random_circle_point()
-            for j in range(3):
-                self.creature_parts[3*i+j, :2] = tuple(self.pm_body[i][j].position)
-                self.creature_parts[3*i+j, 2] = self.pm_body[i][j].angle
+        #for i in range(max_creatures):
+        #    head_offset = pm.vec2d.Vec2d((0.0, 0.8)) * 0.5
+        #    if alive[i] == 1.0 and \
+        #       (self.pm_body[i][0].position - (self.pm_target[i].position - head_offset)).get_length() < 2.0:
+        #        self.pm_target[i].position += random_circle_point()
+        #    for j in range(3):
+        #        self.creature_parts[3*i+j, :2] = tuple(self.pm_body[i][j].position)
+        #        self.creature_parts[3*i+j, 2] = self.pm_body[i][j].angle
 
         #self.creature_data[:, 2] += dt
 
