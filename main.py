@@ -7,8 +7,10 @@ from boa_gfx.transformer import Dynamo, linear, sinusoidal
 import boa_gfx.gl_shader
 import boa_gfx.gl_texture
 
-from creature import Culture
+#from creature import Culture
 import culture
+
+from boa_gfx.time import TimeKeeper
 
 
 class Program(object):
@@ -17,6 +19,8 @@ class Program(object):
 
         self.event_manager = EventManager()
         self.windows = []
+        self.time_keeper = TimeKeeper()
+        self.time_keeper.update()
 
         if sdl2.SDL_Init(sdl2.SDL_INIT_VIDEO) != 0:
             raise RuntimeError('SDL_Init failed: {}'.format(sdl2.SDL_GetError()))
@@ -47,7 +51,8 @@ class Program(object):
         #for i in range(100):
         #    c_old.add_creature()
 
-        c = culture.Culture()
+        c = culture.creature_system()
+        f = culture.food_system()
         #d = culture.Animations()
         #c.position = (0.0, 0.0, 0.)
 
@@ -61,13 +66,15 @@ class Program(object):
         #v.scale = 2.0
 
         while running:
+            self.time_keeper.update()
             self.dynamo.run()
             self.event_manager.process_events()
 
             #u.update()
             #v# .update()
             #c_old.update()
-            c.update(self.dynamo.dt)
+            c.update_instance_data()
+            f.update_instance_data()
             #d.update(self.dynamo.dt)
 
             for w in self.windows:

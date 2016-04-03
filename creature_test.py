@@ -14,6 +14,7 @@ max_creatures = 9
 max_parts = 5
 off_position = (30.0, 30.0)
 
+max_food = 100
 
 @numba.jit
 def _find_first(vec, item):
@@ -33,10 +34,11 @@ class Culture(object):
     def __init__(self):
         # Create creature parts array to share with visualization
         try:
-            self.creature_parts = sa.create('creature_parts', (max_creatures*max_parts, 12), dtype=np.float32) # FIXME: refactor to creature_gfx
-        except FileExistsError:
             sa.delete('creature_parts')
-            self.creature_parts = sa.create('creature_parts', (max_creatures*max_parts, 12), dtype=np.float32)
+        except FileNotFoundError:
+            pass
+        finally:
+            self.creature_parts = sa.create('creature_parts', (max_creatures*max_parts, 12), dtype=np.float32) # FIXME: refactor to creature_gfx
 
         self.creature_parts[:, :2] = (30.0, 30.0)  # Off-screen coordinates
         self.creature_parts[:, 2:] = 1.0  # Avoid undefined behavior by setting everything to one
@@ -57,7 +59,20 @@ class Culture(object):
         self.pm_space.damping = 0.4
         # self.pm_space.gravity = 0.0, -1.0
 
+        # Create creature parts array to share with visualization
+        try:
+            sa.delete('food_gfx')
+        except FileNotFoundError:
+            pass
+        finally:
+            self.food_gfx = sa.create('food_gfx', (max_food, 4),
+                                      dtype=np.float32)  # FIXME: refactor to creature_gfx
+        self.food_gfx[:, :2] = (30.0, 30.0) # Off-screen coordinates
+        self.food_gfx[:, 2:] = 1.0 # Avoid undefined behavior by setting everything to one
+
+
         self.demo_init()
+
 
 
         self.prev_update = time.perf_counter()
@@ -67,6 +82,10 @@ class Culture(object):
 
     def demo_init(self):
         self.add_jelly(0, (0.0, 0.0))
+
+        self.food_gfx[:10, :2] = np.random.rand(10, 2)*20.0 - 10.0
+        self.food_gfx[:10, 2] = np.random.rand(10)*2*np.pi
+        self.food_gfx[:10, 3] = 0.25
 
     def add_jelly(self, index, position):
         print('Creating jelly at index {}'.format(index))
@@ -102,11 +121,11 @@ class Culture(object):
 
         for i in range(3):
             # Position, rotation, scale
-            self.creature_parts[index+i, :4] = [position[0], position[1], 0.0, 1.0]
+            self.creature_parts[max_parts*index+i, :4] = [position[0], position[1], 0.0, 1.0]
             # Texture index, color rotation, saturation, alpha
-            self.creature_parts[index+i, 4:8] = [np.random.randint(0, 10), 0.0, 1.0, 1.0]
+            self.creature_parts[max_parts*index+i, 4:8] = [np.random.randint(0, 10), 0.0, 1.0, 1.0]
             # Animation time offset, beat frequency, swirl radius, swirl frequency
-            self.creature_parts[index+i, 8:12] = [0.0, 1.0, 1.0, 1.0]
+            self.creature_parts[max_parts*index+i, 8:12] = [0.0, 1.0, 1.0, 1.0]
 
     def remove_creature(self, index):
         print('Removing creature at index {}'.format(index))
