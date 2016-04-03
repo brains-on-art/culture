@@ -55,7 +55,9 @@ void main()
     //hsva.y = hsva.y * lhsa.z;
     //hsva.a = hsva.a * lhsa.a;
     //vec3 rgb = hsv2rgb(hsva.xyz);
-    gl_FragColor = texture(image, vec3(uv, current_frame));
+    vec4 rgba = texture(image, vec3(uv, current_frame));
+    rgba.w *= rgba.w*0.8;
+    gl_FragColor = rgba;
     //gl_FragColor = vec4(rgb, hsva.a);
 }
 
