@@ -7,9 +7,7 @@ from boa_gfx.transformer import Dynamo, linear, sinusoidal
 import boa_gfx.gl_shader
 import boa_gfx.gl_texture
 
-#from creature import Culture
 import culture
-
 from boa_gfx.time import TimeKeeper
 
 
@@ -47,35 +45,18 @@ class Program(object):
         background = TexturedTriangleStrip(texture_name='background.png')
         background.scale = 13
 
-        #c_old = Culture(self.event_manager)
-        #for i in range(100):
-        #    c_old.add_creature()
-
-        c = culture.creature_system()
-        f = culture.food_system()
-        #d = culture.Animations()
-        #c.position = (0.0, 0.0, 0.)
-
-        #u = HaloCreature()
-        #print('u vertex data:', u.vertex_data)
-        #u.position += (3.0, 2.0, 0.01)
-
-        #v = WormCreature()
-        #v.position += (-5.0, 0.0, 0.01)
-        #v.z_rotation = 1.0
-        #v.scale = 2.0
+        creatures = culture.creature_system()
+        food = culture.food_system()
+        #animations = culture.animation_system()
 
         while running:
             self.time_keeper.update()
             self.dynamo.run()
             self.event_manager.process_events()
 
-            #u.update()
-            #v# .update()
-            #c_old.update()
-            c.update_instance_data()
-            f.update_instance_data()
-            #d.update(self.dynamo.dt)
+            creatures.update_instance_data()
+            food.update_instance_data()
+            #animations.update_instance_data()
 
             for w in self.windows:
                 w.render()

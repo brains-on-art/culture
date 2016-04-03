@@ -12,9 +12,10 @@ import pymunk as pm
 
 max_creatures = 9
 max_parts = 5
-off_position = (30.0, 30.0)
+offscreen_position = (30.0, 30.0)
 
 max_food = 100
+max_animations = 100
 
 @numba.jit
 def _find_first(vec, item):
@@ -29,18 +30,21 @@ def random_circle_point():
     x,y = 5*np.cos(theta), 5*np.sin(theta)
     return x, y
 
+def create_new_sa_array(name, shape, dtype):
+    try:
+        sa.delete(name)
+    except FileNotFoundError:
+        pass
+    finally:
+        sa_array = sa.create(name, shape, dtype=dtype)
+    return sa_array
 
 class Culture(object):
     def __init__(self):
         # Create creature parts array to share with visualization
-        try:
-            sa.delete('creature_parts')
-        except FileNotFoundError:
-            pass
-        finally:
-            self.creature_parts = sa.create('creature_parts', (max_creatures*max_parts, 12), dtype=np.float32) # FIXME: refactor to creature_gfx
-
-        self.creature_parts[:, :2] = (30.0, 30.0)  # Off-screen coordinates
+        self.creature_parts = create_new_sa_array('creature_parts', (max_creatures*max_parts, 12), np.float32)
+        # FIXME: refactor to creature_gfx
+        self.creature_parts[:, :2] = offscreen_position  # Off-screen coordinates
         self.creature_parts[:, 2:] = 1.0  # Avoid undefined behavior by setting everything to one
 
         # Creature data (no position!)
@@ -59,16 +63,15 @@ class Culture(object):
         self.pm_space.damping = 0.4
         # self.pm_space.gravity = 0.0, -1.0
 
-        # Create creature parts array to share with visualization
-        try:
-            sa.delete('food_gfx')
-        except FileNotFoundError:
-            pass
-        finally:
-            self.food_gfx = sa.create('food_gfx', (max_food, 4),
-                                      dtype=np.float32)  # FIXME: refactor to creature_gfx
-        self.food_gfx[:, :2] = (30.0, 30.0) # Off-screen coordinates
-        self.food_gfx[:, 2:] = 1.0 # Avoid undefined behavior by setting everything to one
+        # Create food graphics array to share with visualization
+        self.food_gfx = create_new_sa_array('food_gfx', (max_food, 4), np.float32)
+        self.food_gfx[:, :2] = offscreen_position # Off-screen coordinates
+        self.food_gfx[:, 2:] = 1.0  # Avoid undefined behavior by setting everything to one
+
+        # Create animation graphics array to share with visualization
+        #self.animation_gfx = create_new_sa_array('animation_gfx', (max_animations, X), np.float32)
+        #self.animation_gfx[:, :2] = offscreen_position  # Off-screen coordinates
+        #self.animation_gfx[:, 2:] = 1.0  # Avoid undefined behavior by setting everything to one
 
 
         self.demo_init()
@@ -171,7 +174,7 @@ class Culture(object):
         # Sync physics with graphics
         positions = [[(body.position.x, body.position.y) for body in creature['body']]
                      if creature['active']
-                     else [off_position for x in range(max_parts)]
+                     else [offscreen_position for x in range(max_parts)]
                      for creature in self.creature_physics]
         self.creature_parts[:, :2] = np.array(positions).reshape(max_creatures*max_parts, 2)
 
