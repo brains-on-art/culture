@@ -97,6 +97,8 @@ class Culture(object):
         self.animation_gfx[:, :2] = offscreen_position  # Off-screen coordinates
         self.animation_gfx[:, 2:] = 1.0  # Avoid undefined behavior by setting everything to one
 
+        self.used_animation = 0
+
 
         self.demo_init()
 
@@ -175,6 +177,10 @@ class Culture(object):
             self.creature_parts[max_parts*index+i, 4:8] = [np.random.randint(0, 10), 0.0, 1.0, 1.0]
             # Animation time offset, beat frequency, swirl radius, swirl frequency
             self.creature_parts[max_parts*index+i, 8:12] = [0.0, 1.0, 1.0, 1.0]
+
+    def add_animation(self, type, position):
+        if type == 'birth':
+            pass
 
     def remove_creature(self, index):
         print('Removing creature at index {}'.format(index))
