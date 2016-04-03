@@ -47,7 +47,7 @@ class Program(object):
 
         creatures = culture.creature_system()
         food = culture.food_system()
-        #animations = culture.animation_system()
+        animations = culture.animation_system()
 
         while running:
             self.time_keeper.update()
@@ -56,7 +56,7 @@ class Program(object):
 
             creatures.update_instance_data()
             food.update_instance_data()
-            #animations.update_instance_data()
+            animations.update_instance_data()
 
             for w in self.windows:
                 w.render()

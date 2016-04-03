@@ -17,6 +17,7 @@ offscreen_position = (30.0, 30.0)
 max_food = 100
 max_animations = 100
 
+
 @numba.jit
 def _find_first(vec, item):
     for i in range(len(vec)):
@@ -24,11 +25,13 @@ def _find_first(vec, item):
             return i
     return -1
 
+
 @numba.jit(nopython=True)
 def random_circle_point():
     theta = np.random.rand()*2*np.pi
     x,y = 5*np.cos(theta), 5*np.sin(theta)
     return x, y
+
 
 def create_new_sa_array(name, shape, dtype):
     try:
@@ -38,6 +41,7 @@ def create_new_sa_array(name, shape, dtype):
     finally:
         sa_array = sa.create(name, shape, dtype=dtype)
     return sa_array
+
 
 class Culture(object):
     def __init__(self):
@@ -69,9 +73,9 @@ class Culture(object):
         self.food_gfx[:, 2:] = 1.0  # Avoid undefined behavior by setting everything to one
 
         # Create animation graphics array to share with visualization
-        #self.animation_gfx = create_new_sa_array('animation_gfx', (max_animations, X), np.float32)
-        #self.animation_gfx[:, :2] = offscreen_position  # Off-screen coordinates
-        #self.animation_gfx[:, 2:] = 1.0  # Avoid undefined behavior by setting everything to one
+        self.animation_gfx = create_new_sa_array('animation_gfx', (max_animations, 8), np.float32)
+        self.animation_gfx[:, :2] = offscreen_position  # Off-screen coordinates
+        self.animation_gfx[:, 2:] = 1.0  # Avoid undefined behavior by setting everything to one
 
 
         self.demo_init()
@@ -89,6 +93,13 @@ class Culture(object):
         self.food_gfx[:10, :2] = np.random.rand(10, 2)*20.0 - 10.0
         self.food_gfx[:10, 2] = np.random.rand(10)*2*np.pi
         self.food_gfx[:10, 3] = 0.25
+
+        self.animation_gfx[:3, :2] = np.random.rand(3, 2) * 20.0 - 10.0
+        self.animation_gfx[:3, 2] = np.random.rand(3) * 2 * np.pi
+        self.animation_gfx[:3, 3] = 1.0
+        self.animation_gfx[:3, 4] = 16.0
+        self.animation_gfx[:3, 5] = np.random.rand(3)*5
+        self.animation_gfx[:3, 6] = 0.1
 
     def add_jelly(self, index, position):
         print('Creating jelly at index {}'.format(index))
@@ -124,7 +135,7 @@ class Culture(object):
 
         for i in range(3):
             # Position, rotation, scale
-            self.creature_parts[max_parts*index+i, :4] = [position[0], position[1], 0.0, 1.0]
+            self.creature_parts[max_parts*index+i, :4] = [position[0], position[1], 0.0, 0.5]
             # Texture index, color rotation, saturation, alpha
             self.creature_parts[max_parts*index+i, 4:8] = [np.random.randint(0, 10), 0.0, 1.0, 1.0]
             # Animation time offset, beat frequency, swirl radius, swirl frequency
