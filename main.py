@@ -38,7 +38,7 @@ class Program(object):
         boa_gfx.gl_texture.texture_manager.texture_paths.append('./textures')
 
         self.windows[0].camera.position = (0.0, 0.0, 13.0)
-        self.windows[0].fullscreen = True
+        # self.windows[0].fullscreen = True
 
         background = TexturedTriangleStrip(texture_name='background.png')
         background.scale = 13
@@ -48,6 +48,7 @@ class Program(object):
         #    c_old.add_creature()
 
         c = culture.Culture()
+        #d = culture.Animations()
         #c.position = (0.0, 0.0, 0.)
 
         #u = HaloCreature()
@@ -67,6 +68,7 @@ class Program(object):
             #v# .update()
             #c_old.update()
             c.update(self.dynamo.dt)
+            #d.update(self.dynamo.dt)
 
             for w in self.windows:
                 w.render()

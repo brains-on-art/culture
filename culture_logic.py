@@ -50,7 +50,7 @@ class Culture(object):
         # ALPHA
         self.creature_parts[:, 7] = 1.0
 
-        self.creature_data = np.zeros((max_creatures, 11))
+        self.creature_data = np.zeros((max_creatures, 12))
         # self.creature_data[:, 0] = 0 # alive
         self.creature_data[:, 1] = 1.0 # max_age
         # self.creature_data[:, 2] = 0 # cur_age
@@ -70,6 +70,7 @@ class Culture(object):
         # self.creature_data[:, 8] = 0 # aggressiveness
         # self.creature_data[:, 9] = 0 # power
         # self.creature_data[:, 10] = 0 # toughness
+        # self.creature_data[:, 11] = 0 # hunger
 
         self.pm_space = pm.Space()
         self.pm_space.damping = 0.7
@@ -131,7 +132,7 @@ class Culture(object):
         #self.dt = p0.0
 
     def add_creature(self, x=None, y=None, pos=None):
-        print('adding creature at ', x, y, pos)
+        # print('adding creature at ', x, y, pos)
         ind = _find_first(self.creature_data[:, 0], 0.0)
         if ind != -1:
             if pos:
@@ -162,9 +163,10 @@ class Culture(object):
                                         0.0, # lastcollided
                                         np.random.random(), # agility
                                         np.random.random(), # mojo
-                                        np.random.random(), # aggressiveness
+                                        np.random.random(), # base_aggressiveness
                                         np.random.random(), # power
-                                        np.random.random()] # toughness
+                                        np.random.random(), # toughness
+                                        np.random.random()] # hunger
 
 
     def update(self, dt):
@@ -217,6 +219,11 @@ class Culture(object):
             #modify colliders' alpha to see them
             self.creature_parts[3*in_collision, 7] = 0.2
 
+        #compute dynamic params at current ts
+        agility = self.creature_data[:, 6] * (1 - (self.creature_data[:,2] / self.creature_data[:,1]))
+        aggr = self.creature_data[:, 8] + self.creature_data[:, 11]
+        power = self.creature_data[:, 9]
+
         # interactions: check all creatures occupied in collision
         for ind in (self.creature_data[:, 4] == 0).nonzero()[0]:
             # who am i colliding with?
@@ -232,10 +239,28 @@ class Culture(object):
                 continue
 
             # does either belligerent want to fight?
-            self.resolve_aggr_check(ind, other)
+            # self.resolve_aggr_check(ind, other)
+            aggr_checks = self.aggr_check([ind, other], aggr)
+            if aggr_checks.all(): #both want to fight, or [True, True]
+                winner = ind if power[ind] > power[other] else other
+                loser = other if winner == ind else ind
+                print('{} killed {}'.format(winner, loser))
+
+            elif aggr_checks.any(): #only 1 wants to fight, so give chase
+                chaser = [ind, other][aggr_checks.argmax()]
+                chased = [ind, other][aggr_checks.argmin()]
+
+                did_escape = self.check_escape(chaser, chased, agility)
+                print('escape check for {} against {} {}'.format(chased, chaser, {True:'succeeded', False:'failed'}[did_escape]))
+
+            else: # neither wanted to fight so how about mating?
+                print('neither {} nor {} wanted to fight'.format(ind, other))
 
             # either belligerent(?) wants to sex?
-            self.resolve_mating_check(ind, other)
+            # self.resolve_mating_check(ind, other)
+
+            # finally set both as "recently checked" so they wont interact in a while
+            self.creature_data[[ind, other],5] = self.ct
 
     def is_occupied(self, arr_like):
         return (self.creature_data[arr_like, 4] < 0).any()
@@ -243,39 +268,54 @@ class Culture(object):
     def is_on_refractory_period(self, arr_like):
         return np.array([(self.ct - self.creature_data[r, 5] < self.refractory_period) for r in arr_like]).any()
 
-    def resolve_mating_check(self, a, b):
-        mojo = self.creature_data[:, 7]
-        alive = self.creature_data[:, 0]
-        if alive[[a,b]].all() and (mojo[[a,b]] > 0.6).any():
-            print('these two had sex: {0} mojo={1:.4f}, {2} mojo={3:.4f}, and they produced a new one'.format(a, mojo[a], b, mojo[b]))
-            self.add_creature(pos=self.pm_body[a][0].position)
-            self.creature_data[[a,b],5] = self.ct
-        return
+    def check_escape(self, chaser, chased, agility):
+        # compares dynamic agilities, returns True if chased is more agile, i.e gets away
+        return agility[chaser] < agility[chased]
 
-    def resolve_aggr_check(self, a, b):
-        aggr = self.creature_data[:, 8]
-        power = self.creature_data[:, 9]
-        toughness = self.creature_data[:, 10]
-        if max(aggr[[a,b]]) < 0.6: #neither wants to fight
-            self.creature_data[[a,b],5] = self.ct
-            print('neither {0} nor {1} wanted a fight'.format(a,b))
+    def aggr_check(self, creature_ind_array, aggr):
+        # roll a die (random [0,1]): if the value is less than aggr-value ([0,1]), the check returns True
+        aggro_array = [aggr[i] > np.random.random() for i in creature_ind_array]
+        print('aggressiveness checks for {} / {}: {}'.format(creature_ind_array, aggr[creature_ind_array], aggro_array))
+        return np.array(aggro_array)
 
-        else: #FIGHT
-            print('at least one wants to fight: {0} aggr={1:.4f}, {2} aggr={3:.4f}'.format(a, aggr[a], b, aggr[b]))
-            a_dmg = power[a] - toughness[b]
-            b_dmg = power[b] - toughness[a]
-            # only one can walk away from this
-            winner = a if a_dmg > b_dmg else b
-            loser = b if winner == a else a
-            # we do it by setting max age to be current age
-            self.creature_data[loser, 1] = self.creature_data[loser, 2]
-            self.creature_data[loser, 0]  = 0 # blarg im dead
+    # def resolve_mating_check(self, a, b):
+    #     alive = self.creature_data[:, 0]
+    #     agility = self.creature_data[:, 6]
+    #     mojo = self.creature_data[:, 7]
+    #     if alive[[a,b]].all() and (mojo[[a,b]] > 0.6).any():
+    #         print('these two had sex: {0} mojo={1:.4f}, {2} mojo={3:.4f}, and they produced a new one'.format(a, mojo[a], b, mojo[b]))
+    #         self.add_creature(pos=self.pm_body[a][0].position)
+    #         self.creature_data[[a,b],5] = self.ct
+    #     return
 
-            # try to stop the dead thing from moving: set target pos = creature pos
-            self.pm_target[loser].position = self.pm_body[loser][0].position
-
-            self.creature_data[[a,b],5] = self.ct
-            print('{0} killed {1}!'.format(winner,loser))
+    # def resolve_aggr_check(self, a, b):
+    #     alive = self.creature_data[:, 0]
+    #     agility = self.creature_data[:, 6]
+    #     aggr = self.creature_data[:, 8]
+    #     power = self.creature_data[:, 9]
+    #     toughness = self.creature_data[:, 10]
+    #     if not alive[[a,b]].all():
+    #         return
+    #     if max(aggr[[a,b]]) < 0.6: #neither wants to fight
+    #         self.creature_data[[a,b],5] = self.ct
+    #         print('neither {0} nor {1} wanted a fight'.format(a,b))
+    #
+    #     else: #FIGHT
+    #         print('at least one wants to fight: {0} aggr={1:.4f}, {2} aggr={3:.4f}'.format(a, aggr[a], b, aggr[b]))
+    #         a_dmg = power[a] - toughness[b]
+    #         b_dmg = power[b] - toughness[a]
+    #         # only one can walk away from this
+    #         winner = a if a_dmg > b_dmg else b
+    #         loser = b if winner == a else a
+    #         # we do it by setting max age to be current age
+    #         self.creature_data[loser, 1] = self.creature_data[loser, 2]
+    #         self.creature_data[loser, 0]  = 0 # blarg im dead
+    #
+    #         # try to stop the dead thing from moving: set target pos = creature pos
+    #         self.pm_target[loser].position = self.pm_body[loser][0].position
+    #
+    #         self.creature_data[[a,b],5] = self.ct
+    #         print('{0} killed {1}!'.format(winner,loser))
 
     def get_collision_matrix(self):
         collisions = np.zeros((max_creatures, max_creatures))
