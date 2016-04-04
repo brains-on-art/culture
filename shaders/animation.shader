@@ -4,7 +4,8 @@
 layout(location = 0)in vec2 position;
 layout(location = 1)in vec2 texture_coordinate;
 layout(location = 2)in vec4 animation_position;
-layout(location = 3)in vec4 animation_param;
+layout(location = 3)in vec4 animation_param1;
+layout(location = 4)in vec4 animation_param2;
 
 uniform mat4 MVP;
 uniform float t;
@@ -21,11 +22,23 @@ void main()
     gl_Position = MVP * vec4(z_rot*scale*position + animation_position.xy, 0.0, 1.0);
     uv = texture_coordinate;
 
-    float num_frames = animation_param.x;
-    float start_t = animation_param.y;
-    float frame_t = animation_param.z;
-    current_frame = floor(mod((t-start_t)/frame_t, num_frames));
+    float start_frame = animation_param1.x;
+    float end_frame = animation_param1.y;
+    float start_time = animation_param1.z;
+    float loop_time = animation_param1.w;
 
+    float num_loops = animation_param2.x;
+    float default_frame = animation_param2.y;
+
+    float num_frames = end_frame - start_frame + 1;
+    float anim_t = (t - start_time);
+    float anim_loop = floor(anim_t/loop_time);
+
+    if (anim_t < 0.0 || anim_loop >= num_loops) {
+        current_frame = default_frame;
+    } else {
+        current_frame = start_frame + floor(mod(anim_t, loop_time)*(num_frames/loop_time));
+    }
 }
 
 

@@ -93,7 +93,7 @@ class Culture(object):
         self.food_gfx[:, 2:] = 1.0  # Avoid undefined behavior by setting everything to one
 
         # Create animation graphics array to share with visualization
-        self.animation_gfx = create_new_sa_array('animation_gfx', (max_animations, 8), np.float32)
+        self.animation_gfx = create_new_sa_array('animation_gfx', (max_animations, 12), np.float32)
         self.animation_gfx[:, :2] = offscreen_position  # Off-screen coordinates
         self.animation_gfx[:, 2:] = 1.0  # Avoid undefined behavior by setting everything to one
 
@@ -101,8 +101,6 @@ class Culture(object):
 
 
         self.demo_init()
-
-
 
         self.prev_update = time.perf_counter()
         self.ct = time.perf_counter()
@@ -116,12 +114,15 @@ class Culture(object):
         self.food_gfx[:10, 2] = np.random.rand(10)*2*np.pi
         self.food_gfx[:10, 3] = 0.25
 
-        self.animation_gfx[:3, :2] = np.random.rand(3, 2) * 20.0 - 10.0
-        self.animation_gfx[:3, 2] = np.random.rand(3) * 2 * np.pi
-        self.animation_gfx[:3, 3] = 1.0
-        self.animation_gfx[:3, 4] = 16.0
-        self.animation_gfx[:3, 5] = np.random.rand(3)*5
-        self.animation_gfx[:3, 6] = 0.1
+        self.animation_gfx[:3, :2] = np.random.rand(3, 2) * 20.0 - 10.0 # POS
+        self.animation_gfx[:3, 2] = np.random.rand(3) * 2 * np.pi       # ROTATION
+        self.animation_gfx[:3, 3] = 1.0 # SCALE
+        self.animation_gfx[:3, 4] = 0.0 # START FRAME
+        self.animation_gfx[:3, 5] = 15.0 # END FRAME
+        self.animation_gfx[:3, 6] = np.random.rand(3) + time.perf_counter() # TIME OFFSET
+        self.animation_gfx[:3, 7] = 1.0 # LOOP TIME
+        self.animation_gfx[:3, 8] = 5.0 # NUM LOOPS
+        self.animation_gfx[:3, 9] = 0.0 # DEFAULT FRAME
 
     def add_jelly(self, index, position):
         print('Creating jelly at index {}'.format(index))
