@@ -12,13 +12,14 @@ sys.path.append('./pymunk')
 import pymunk as pm
 
 zmq_port = '5556'
-max_creatures = 9
+max_creatures = 50
 max_parts = 5
 offscreen_position = (30.0, 30.0)
 
 max_food = 100
 max_animations = 100
 
+resting_period = 30
 
 @numba.jit
 def _find_first(vec, item):
@@ -63,7 +64,8 @@ class Culture(object):
                                 ('age', float),
                                 ('size', float),
                                 ('mood', int),
-                                ('last_interacted', float),
+                                ('started_colliding', float),
+                                ('ended_interaction', float),
                                 ('agility_base', float),
                                 ('virility_base', float),
                                 ('mojo', float),
@@ -157,18 +159,19 @@ class Culture(object):
 
         # self.creature_data[index, :] = [1.0, np.random.random(1)*10+10, 0.0, 0.5]  # Alive, max_age, age, size
         self.creature_data[index]['alive'] = 1
-        self.creature_data[index]['max_age' ] = 10
-        self.creature_data[index]['age' ] = 0
-        self.creature_data[index]['size' ] = 0.5
+        self.creature_data[index]['max_age'] = np.random.random(1)*180+180
+        self.creature_data[index]['age'] = 0
+        self.creature_data[index]['size'] = 0.5
         self.creature_data[index]['mood'] = 1
-        self.creature_data[index]['last_interacted' ] = time.perf_counter()
-        self.creature_data[index]['agility_base' ] = np.random.random()
-        self.creature_data[index]['virility_base' ] = np.random.random()
-        self.creature_data[index]['mojo' ] = np.random.random()
-        self.creature_data[index]['aggressiveness_base' ] = np.random.random()
-        self.creature_data[index]['power' ] = np.random.random()
-        self.creature_data[index]['hunger' ] = 0.5
-        # self.creature_data[index]['type']
+        self.creature_data[index]['started_colliding'] = 0.0
+        self.creature_data[index]['ended_interaction'] = 0.0
+        self.creature_data[index]['agility_base'] = np.random.random()
+        self.creature_data[index]['virility_base'] = np.random.random()
+        self.creature_data[index]['mojo'] = np.random.random()
+        self.creature_data[index]['aggressiveness_base'] = np.random.random()
+        self.creature_data[index]['power'] = np.random.random()
+        self.creature_data[index]['hunger'] = 0.5
+        self.creature_data[index]['type'] = 1
         # self.creature_data[index]['color']
 
         for i in range(3):
@@ -194,9 +197,8 @@ class Culture(object):
         cp['body'] = None
         cp['constraint'] = None
 
-        # self.creature_data[index, :] = [0.0, 1.0, 0.0, 1.0]  # Alive, max_age, age, size
         self.creature_data[index] = np.zeros(len(self.creature_data.dtype.names))
-        self.creature_parts[index:index+max_parts, :2] = (30.0, 30.0)
+        self.creature_parts[index:index+max_parts, :2] = offscreen_position
 
     def update(self, dt):
         self.ct = time.perf_counter()
@@ -208,40 +210,111 @@ class Culture(object):
 
             #i = np.random.randint(0, max_creatures)
             #self.pm_target[i].position = tuple(np.random.random(2)*20.0 - 10.0)
-        #
 
-        # Update creature age and remove dead creatures
+        # Update creature age...
         alive = self.creature_data['alive']
         max_age = self.creature_data['max_age']
         cur_age = self.creature_data['age']
         cur_age[:] += dt
+        # ...and compute the other dynamic params
+        hunger = self.creature_data['hunger'] + dt
+        agility = self.creature_data['agility_base'] * (1 - (self.creature_data['age'] / self.creature_data['max_age']))
+        succulence = 1 - hunger
+        aggr = self.creature_data['aggressiveness_base'] + self.creature_data['hunger']
+        virility = self.creature_data['virility_base'] + 1 - self.creature_data['hunger']
+        mood = self.creature_data['mood']
+        creature_type = self.creature_data['type']
+        last_interacted = self.creature_data['ended_interaction']
+
+        # Update appearance changes from aging and remove dead creatures
         self.creature_parts[:, 6] = np.clip(1.0 - (cur_age / max_age), 0.0, 1.0).repeat(5)
-        # dying_creatures = (alive == 1.0) & (cur_age > max_age)
         self.creature_parts[:, 7] = np.clip(1.0 - (cur_age - max_age)/5.0, 0.0, 1.0).repeat(5)
         dead_creatures = (alive == 1.0) & (cur_age > max_age + 5.0)
         for ind in np.where(dead_creatures)[0]:
             self.remove_creature(ind)
-        #self.creature_data[dead_creatures, 0] = 0.0
 
+        # Find colliding creatures and deal with them
+        collisions = self.get_collision_matrix()
+        ids_in_collision = np.nonzero([sum(i) for i in collisions])[0]
+        if ids_in_collision.any():
+            for id in ids_in_collision:
+                # creatures can start an interaction if they are at mood 1
+                if (mood[id] == 1) and (self.ct - last_interacted[id]) > resting_period:
+                    mood[id] = 0
+                    print('{} was noticed to be colliding (mood=0) at ts {}'.format(id, time.perf_counter()))
+            #modify colliders' alpha to see them
+            self.creature_parts[ids_in_collision * max_parts, 7] = 0.2
+
+        # Move creatures
+        for i in range(max_creatures):
+            cp = self.creature_physics[i]
+            if not alive[i]:
+                # Dead creatures don't need to move...
+               continue
+
+            if mood[i] == 0:
+                # ...(WIP: for now, just mark the time and go to "stopped" state)...
+                self.creature_data[i]['started_colliding'] = time.perf_counter()
+                mood[i] = -1
+                print('{} marked as started colliding (mood=-1) at ts {}'.format(i, self.creature_data[i]['started_colliding']))
+                continue
+            elif mood[i] == -1:
+                # ...but occupied creatures need to stop
+                cp['target'].position = cp['body'][0].position
+                for body in cp['body']:
+                    body.velocity = (0,0)
+                    body.reset_forces()
+                # in essence: stay still for 5s before revealing the result
+                if (time.perf_counter() - self.creature_data[i]['started_colliding']) > 5:
+                    # TODO: shoot in some direction
+                    mood[i] = 1
+                    self.creature_data[i]['ended_interaction'] = time.perf_counter()
+                    print('{} ended interaction (back to mood = 1) at ts {}'.format(i, mood[i], self.creature_data[i]['ended_interaction']))
+                    continue
+
+            elif mood[i] == 1:
+                # Default mood, move creatures according to their type
+                if creature_type[i] == 1:
+                    if self.creature_physics[i]['body'][0].velocity.get_length() < 0.5:
+                        self.creature_physics[i]['target'].position += random_circle_point()
+                #    for j in range(3):
+                #        self.creature_parts[3*i+j, :2] = tuple(self.pm_body[i][j].position)
+                #        self.creature_parts[3*i+j, 2] = self.pm_body[i][j].angle
+
+        # Advance the physics simulation and sync physics with graphics
         self.pm_space.step(dt)
-
-        # Sync physics with graphics
         positions = [[(body.position.x, body.position.y) for body in creature['body']]
                      if creature['active']
                      else [offscreen_position for x in range(max_parts)]
                      for creature in self.creature_physics]
         self.creature_parts[:, :2] = np.array(positions).reshape(max_creatures*max_parts, 2)
 
-        #for i in range(max_creatures):
-        #    head_offset = pm.vec2d.Vec2d((0.0, 0.8)) * 0.5
-        #    if alive[i] == 1.0 and \
-        #       (self.pm_body[i][0].position - (self.pm_target[i].position - head_offset)).get_length() < 2.0:
-        #        self.pm_target[i].position += random_circle_point()
-        #    for j in range(3):
-        #        self.creature_parts[3*i+j, :2] = tuple(self.pm_body[i][j].position)
-        #        self.creature_parts[3*i+j, 2] = self.pm_body[i][j].angle
+    def get_collision_matrix(self):
+        collisions = np.zeros((max_creatures, max_creatures))
+        alive = self.creature_data['alive']
+        scale = self.creature_data['size']
+        # we only need one half of the matrix separated by the diagonal, but
+        # we still compute the whole thing D:
+        for i in range(max_creatures):
+            for j in range(max_creatures):
+                #if this creature id hasn't been instantiated yet, its parts'll be None
+                if not np.all([creature['body'] for creature in np.array(self.creature_physics)[[i,j]]]):
+                    collisions[i,j] = False
+                    continue
+                head_i = self.creature_physics[i]['body'][0]
+                head_j = self.creature_physics[j]['body'][0]
 
-        #self.creature_data[:, 2] += dt
+                # don't collide with self or if you're dead
+                if i == j or (not alive[i] or not alive[j]):
+                    collisions[i,j] = False
+                    continue
+
+                xdist = head_i.position.x - head_j.position.x
+                ydist = head_i.position.y - head_j.position.y
+
+                squaredist = np.sqrt((xdist * xdist) + (ydist * ydist))
+                collisions[i,j] = squaredist <= scale[i] + scale[j]
+        return collisions
 
     @staticmethod
     def cleanup():
