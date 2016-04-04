@@ -28,14 +28,17 @@ void main()
     float loop_time = animation_param1.w;
 
     float num_loops = animation_param2.x;
-    float default_frame = animation_param2.y;
+    float alpha_frame = animation_param2.y;
+    float omega_frame = animation_param2.z;
 
     float num_frames = end_frame - start_frame + 1;
     float anim_t = (t - start_time);
     float anim_loop = floor(anim_t/loop_time);
 
-    if (anim_t < 0.0 || anim_loop >= num_loops) {
-        current_frame = default_frame;
+    if (anim_t < 0.0) {
+        current_frame = alpha_frame;
+    } else if (anim_loop >= num_loops) {
+        current_frame = omega_frame;
     } else {
         current_frame = start_frame + floor(mod(anim_t, loop_time)*(num_frames/loop_time));
     }

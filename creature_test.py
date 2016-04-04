@@ -97,8 +97,7 @@ class Culture(object):
         self.animation_gfx[:, :2] = offscreen_position  # Off-screen coordinates
         self.animation_gfx[:, 2:] = 1.0  # Avoid undefined behavior by setting everything to one
 
-        self.used_animation = 0
-
+        self.next_animation = 0
 
         self.demo_init()
 
@@ -114,15 +113,18 @@ class Culture(object):
         self.food_gfx[:10, 2] = np.random.rand(10)*2*np.pi
         self.food_gfx[:10, 3] = 0.25
 
-        self.animation_gfx[:3, :2] = np.random.rand(3, 2) * 20.0 - 10.0 # POS
-        self.animation_gfx[:3, 2] = np.random.rand(3) * 2 * np.pi       # ROTATION
-        self.animation_gfx[:3, 3] = 1.0 # SCALE
-        self.animation_gfx[:3, 4] = 0.0 # START FRAME
-        self.animation_gfx[:3, 5] = 15.0 # END FRAME
-        self.animation_gfx[:3, 6] = np.random.rand(3) + time.perf_counter() # TIME OFFSET
-        self.animation_gfx[:3, 7] = 1.0 # LOOP TIME
-        self.animation_gfx[:3, 8] = 5.0 # NUM LOOPS
-        self.animation_gfx[:3, 9] = 0.0 # DEFAULT FRAME
+        self.add_animation('birth',
+                           position=np.random.rand(2) * 20.0 - 10.0,
+                           rotation=np.random.rand() * 2 * np.pi,
+                           num_loops=5)
+        self.add_animation('birth',
+                           position=np.random.rand(2) * 20.0 - 10.0,
+                           rotation=np.random.rand() * 2 * np.pi,
+                           num_loops=5)
+        self.add_animation('birth',
+                           position=np.random.rand(2) * 20.0 - 10.0,
+                           rotation=np.random.rand() * 2 * np.pi,
+                           num_loops=5)
 
     def add_jelly(self, index, position):
         print('Creating jelly at index {}'.format(index))
@@ -179,9 +181,19 @@ class Culture(object):
             # Animation time offset, beat frequency, swirl radius, swirl frequency
             self.creature_parts[max_parts*index+i, 8:12] = [0.0, 1.0, 1.0, 1.0]
 
-    def add_animation(self, type, position):
+    def add_animation(self, type, position, rotation=0.0, scale=1.0, relative_start_time=0.0, num_loops=1):
+        ind = self.next_animation
+        pos_rot_scale = [position[0], position[1], rotation, scale]
+        start_time = time.perf_counter() + relative_start_time
         if type == 'birth':
-            pass
+            start_frame, end_frame = 0.0, 15.0 # FIXME: halutaanko kovakoodata nämä
+            loop_time = 1.0
+            self.animation_gfx[ind, :11] = pos_rot_scale + [start_frame, end_frame, start_time, loop_time] + [num_loops, start_frame, end_frame]
+        self.next_animation += 1
+        if self.next_animation >= max_animations:
+            self.next_animation = 0
+
+        return ind
 
     def remove_creature(self, index):
         print('Removing creature at index {}'.format(index))
