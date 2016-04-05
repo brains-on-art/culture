@@ -127,6 +127,18 @@ class Culture(object):
                            position=np.random.rand(2) * 20.0 - 10.0,
                            rotation=np.random.rand() * 2 * np.pi,
                            num_loops=5)
+        self.add_animation('death',
+                           position=np.random.rand(2) * 20.0 - 10.0,
+                           rotation=np.random.rand() * 2 * np.pi,
+                           num_loops=20)
+        self.add_animation('death',
+                           position=np.random.rand(2) * 20.0 - 10.0,
+                           rotation=np.random.rand() * 2 * np.pi,
+                           num_loops=20)
+        self.add_animation('death',
+                           position=np.random.rand(2) * 20.0 - 10.0,
+                           rotation=np.random.rand() * 2 * np.pi,
+                           num_loops=20)
 
     def add_jelly(self, index, position):
         print('Creating jelly at index {}'.format(index))
@@ -185,13 +197,32 @@ class Culture(object):
             self.creature_parts[max_parts*index+i, 8:12] = [0.0, 1.0, 1.0, 1.0]
 
     def add_animation(self, type, position, rotation=0.0, scale=1.0, relative_start_time=0.0, num_loops=1):
+        # Add animation to next slot
         ind = self.next_animation
-        pos_rot_scale = [position[0], position[1], rotation, scale]
-        start_time = time.perf_counter() + relative_start_time
+
+        print('Adding {} animation at {}, position {}'.format(type, ind, position))
+        # Get animation specific parameters
         if type == 'birth':
             start_frame, end_frame = 0.0, 15.0 # FIXME: halutaanko kovakoodata nämä
             loop_time = 1.0
-            self.animation_gfx[ind, :11] = pos_rot_scale + [start_frame, end_frame, start_time, loop_time] + [num_loops, start_frame, end_frame]
+        elif type == 'death':
+            start_frame, end_frame = 16.0, 37.0
+            loop_time = 2.0
+        else:
+            return None
+
+        # Calculate absolute start time
+        start_time = time.perf_counter() + relative_start_time
+
+        # Construct attribute vectors (matches GLSL
+        position_vec = [position[0], position[1], rotation, scale]
+        param1_vec = [start_frame, end_frame, start_time, loop_time]
+        param2_vec = [num_loops, start_frame, end_frame]
+
+        # Add animation data to shared array
+        self.animation_gfx[ind, :11] = position_vec + param1_vec + param2_vec
+
+        # Advance to next animation array position
         self.next_animation += 1
         if self.next_animation >= max_animations:
             self.next_animation = 0
