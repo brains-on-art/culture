@@ -42,9 +42,6 @@ class Program(object):
         self.windows[0].camera.position = (0.0, 0.0, 13.0)
         self.windows[0].fullscreen = True
 
-        background = TexturedTriangleStrip(texture_name='background.png')
-        background.scale = 13
-
         creatures = culture.creature_system()
         food = culture.food_system()
         animations = culture.animation_system()
