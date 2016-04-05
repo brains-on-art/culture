@@ -255,7 +255,7 @@ class Culture(object):
         self.creature_data[index]['aggressiveness_base'] = np.random.random()
         self.creature_data[index]['power'] = np.random.random()
         self.creature_data[index]['hunger'] = 0.5
-        self.creature_data[index]['type'] = 1
+        self.creature_data[index]['type'] = 2
 
         position_vec = [position[0], position[1], 0.0, 0.5]  # Position, rotation, scale
         animation_vec = [0.0, 1.0, 1.0, 1.0]  # Animation time offset, beat frequency, swirl radius, swirl frequency
