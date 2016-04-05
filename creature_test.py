@@ -141,6 +141,18 @@ class Culture(object):
                                position=np.random.rand(2) * 20.0 - 10.0,
                                rotation=np.random.rand() * 2 * np.pi,
                                num_loops=20)
+            self.add_animation('contact',
+                               position=np.random.rand(2) * 20.0 - 10.0,
+                               rotation=np.random.rand() * 2 * np.pi,
+                               num_loops=20)
+            self.add_animation('fight',
+                               position=np.random.rand(2) * 20.0 - 10.0,
+                               rotation=np.random.rand() * 2 * np.pi,
+                               num_loops=20)
+            self.add_animation('reproduction',
+                               position=np.random.rand(2) * 20.0 - 10.0,
+                               rotation=np.random.rand() * 2 * np.pi,
+                               num_loops=20)
 
     def get_texture(self, group, variant=None, part=None):
         if group == 'jelly':
@@ -273,8 +285,18 @@ class Culture(object):
         if type == 'birth':
             start_frame, end_frame = 0.0, 15.0 # FIXME: halutaanko kovakoodata nämä
             loop_time = 1.0
+        elif type == 'contact':
+            start_frame, end_frame = 16.0, 33.0
+            loop_time = 2.0
         elif type == 'death':
-            start_frame, end_frame = 16.0, 37.0
+            scale *= 1.5
+            start_frame, end_frame = 34.0, 55.0
+            loop_time = 3.0
+        elif type == 'fight':
+            start_frame, end_frame = 56.0, 73.0
+            loop_time = 2.0
+        elif type == 'reproduction':
+            start_frame, end_frame = 74.0, 91.0
             loop_time = 2.0
         else:
             return None
@@ -294,10 +316,28 @@ class Culture(object):
         # Add animation data to shared array
         self.animation_gfx[index, :11] = position_vec + param1_vec + param2_vec
 
-        # Advance to next animation array position
-        self.next_animation += 1
-        if self.next_animation >= max_animations:
-            self.next_animation = 0
+        if type in ['contact', 'fight', 'reproduction']:
+            old_index = []
+
+            # Add a second copy with time shift
+            param1_vec[2] += loop_time / 3.0
+            old_index.append(index)
+            index = index + 1 if index < max_animations - 1 else 0
+            print('Adding {} animation at {} (index {})'.format(type, position, index))
+            self.animation_gfx[index, :11] = position_vec + param1_vec + param2_vec
+
+            param1_vec[2] += loop_time / 3.0
+            old_index.append(index)
+            index = index + 1 if index < max_animations - 1 else 0
+            print('Adding {} animation at {} (index {})'.format(type, position, index))
+            self.animation_gfx[index, :11] = position_vec + param1_vec + param2_vec
+
+            self.next_animation = index + 1 if index < max_animations - 1 else 0
+            old_index.append(index)
+            index = old_index
+        else:
+            # Advance to next animation array position
+            self.next_animation = index + 1 if index < max_animations - 1 else 0
 
         return index
 
@@ -312,7 +352,7 @@ class Culture(object):
             rotation = np.random.rand() * 2 * np.pi
 
         # Construct attribute vectors (matches GLSL)
-        position_vec = [position[0], position[1], rotation, 0.25]
+        position_vec = [position[0], position[1], rotation, 0.125]
 
         # Add animation data to shared array
         self.food_gfx[index, :] = position_vec
