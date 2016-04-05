@@ -17,7 +17,7 @@ import pymunk as pm
 zmq_port = '5556'
 max_creatures = 50
 max_parts = 5
-offscreen_position = (30.0, 30.0)
+offscreen_position = (30.0, 30.0, 0.0)
 
 max_food = 100
 max_animations = 100
@@ -54,8 +54,8 @@ class Culture(object):
         # Create creature parts array to share with visualization
         self.creature_parts = create_new_sa_array('creature_parts', (max_creatures*max_parts, 12), np.float32)
         # FIXME: refactor to creature_gfx
-        self.creature_parts[:, :2] = offscreen_position  # Off-screen coordinates
-        self.creature_parts[:, 2:] = 1.0  # Avoid undefined behavior by setting everything to one
+        self.creature_parts[:, :3] = offscreen_position  # Off-screen coordinates
+        self.creature_parts[:, 3:] = 1.0  # Avoid undefined behavior by setting everything to one
 
         # Creature data (no position!)
         # self.creature_data = np.zeros((max_creatures, 4))
@@ -105,14 +105,14 @@ class Culture(object):
 
         # Create food graphics array to share with visualization
         self.food_gfx = create_new_sa_array('food_gfx', (max_food, 4), np.float32)
-        self.food_gfx[:, :2] = offscreen_position # Off-screen coordinates
-        self.food_gfx[:, 2:] = 1.0  # Avoid undefined behavior by setting everything to one
+        self.food_gfx[:, :3] = offscreen_position # Off-screen coordinates
+        self.food_gfx[:, 3:] = 1.0  # Avoid undefined behavior by setting everything to one
         self.next_food = 0
 
         # Create animation graphics array to share with visualization
         self.animation_gfx = create_new_sa_array('animation_gfx', (max_animations, 12), np.float32)
-        self.animation_gfx[:, :2] = offscreen_position  # Off-screen coordinates
-        self.animation_gfx[:, 2:] = 1.0  # Avoid undefined behavior by setting everything to one
+        self.animation_gfx[:, :3] = offscreen_position  # Off-screen coordinates
+        self.animation_gfx[:, 3:] = 1.0  # Avoid undefined behavior by setting everything to one
         self.next_animation = 0
 
         self.demo_init()
@@ -244,7 +244,7 @@ class Culture(object):
         head = cp['body'][0]
         head.position = position
         for i in range(1, 5):
-            cp['body'][i].position = offscreen_position
+            cp['body'][i].position = offscreen_position[:2]
 
         head_offset = pm.Vec2d((0.0, 0.4))
         cp['constraint'] = [pm.constraint.DampedSpring(head, cp['target'], head_offset, (0.0, 0.0), 0.0, 10.0, 15.0)]
@@ -376,7 +376,7 @@ class Culture(object):
         cp['constraint'] = None
 
         self.creature_data[index] = np.zeros(len(self.creature_data.dtype.names))
-        self.creature_parts[index:index+max_parts, :2] = offscreen_position
+        self.creature_parts[index:index+max_parts, :3] = offscreen_position
 
     def update(self, dt):
         self.ct = time.perf_counter()
@@ -470,11 +470,12 @@ class Culture(object):
         # Advance the physics simulation and sync physics with graphics
         self.pm_space.step(dt)
 
-        positions = [[(body.position.x, body.position.y) for body in creature['body']]
+        positions = [[(body.position.x, body.position.y, -body.angle) for body in creature['body']]
                      if creature['active']
                      else [offscreen_position for x in range(max_parts)]
                      for creature in self.creature_physics]
-        self.creature_parts[:, :2] = np.array(positions).reshape(max_creatures*max_parts, 2)
+        positions = np.array(positions).reshape(max_creatures*max_parts, 3)
+        self.creature_parts[:, :3] = positions
 
     def can_start_interaction(self, arr_like):
         mood = self.creature_data['mood']
