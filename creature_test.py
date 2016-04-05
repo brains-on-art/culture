@@ -93,12 +93,12 @@ class Culture(object):
         self.food_gfx = create_new_sa_array('food_gfx', (max_food, 4), np.float32)
         self.food_gfx[:, :2] = offscreen_position # Off-screen coordinates
         self.food_gfx[:, 2:] = 1.0  # Avoid undefined behavior by setting everything to one
+        self.next_food = 0
 
         # Create animation graphics array to share with visualization
         self.animation_gfx = create_new_sa_array('animation_gfx', (max_animations, 12), np.float32)
         self.animation_gfx[:, :2] = offscreen_position  # Off-screen coordinates
         self.animation_gfx[:, 2:] = 1.0  # Avoid undefined behavior by setting everything to one
-
         self.next_animation = 0
 
         self.demo_init()
@@ -111,34 +111,18 @@ class Culture(object):
     def demo_init(self):
         self.add_jelly(0, (0.0, 0.0))
 
-        self.food_gfx[:10, :2] = np.random.rand(10, 2)*20.0 - 10.0
-        self.food_gfx[:10, 2] = np.random.rand(10)*2*np.pi
-        self.food_gfx[:10, 3] = 0.25
+        for i in range(10):
+            self.add_food(np.random.rand(2)*20.0 - 10.0)
 
-        self.add_animation('birth',
-                           position=np.random.rand(2) * 20.0 - 10.0,
-                           rotation=np.random.rand() * 2 * np.pi,
-                           num_loops=5)
-        self.add_animation('birth',
-                           position=np.random.rand(2) * 20.0 - 10.0,
-                           rotation=np.random.rand() * 2 * np.pi,
-                           num_loops=5)
-        self.add_animation('birth',
-                           position=np.random.rand(2) * 20.0 - 10.0,
-                           rotation=np.random.rand() * 2 * np.pi,
-                           num_loops=5)
-        self.add_animation('death',
-                           position=np.random.rand(2) * 20.0 - 10.0,
-                           rotation=np.random.rand() * 2 * np.pi,
-                           num_loops=20)
-        self.add_animation('death',
-                           position=np.random.rand(2) * 20.0 - 10.0,
-                           rotation=np.random.rand() * 2 * np.pi,
-                           num_loops=20)
-        self.add_animation('death',
-                           position=np.random.rand(2) * 20.0 - 10.0,
-                           rotation=np.random.rand() * 2 * np.pi,
-                           num_loops=20)
+        for i in range(3):
+            self.add_animation('birth',
+                               position=np.random.rand(2) * 20.0 - 10.0,
+                               rotation=np.random.rand() * 2 * np.pi,
+                               num_loops=5)
+            self.add_animation('death',
+                               position=np.random.rand(2) * 20.0 - 10.0,
+                               rotation=np.random.rand() * 2 * np.pi,
+                               num_loops=20)
 
     def add_jelly(self, index, position):
         print('Creating jelly at index {}'.format(index))
@@ -196,11 +180,11 @@ class Culture(object):
             # Animation time offset, beat frequency, swirl radius, swirl frequency
             self.creature_parts[max_parts*index+i, 8:12] = [0.0, 1.0, 1.0, 1.0]
 
-    def add_animation(self, type, position, rotation=0.0, scale=1.0, relative_start_time=0.0, num_loops=1):
+    def add_animation(self, type, position, rotation=None, scale=1.0, relative_start_time=0.0, num_loops=1):
         # Add animation to next slot
-        ind = self.next_animation
+        index = self.next_animation
 
-        print('Adding {} animation at {}, position {}'.format(type, ind, position))
+        print('Adding {} animation at {} (index {})'.format(type, position, index))
         # Get animation specific parameters
         if type == 'birth':
             start_frame, end_frame = 0.0, 15.0 # FIXME: halutaanko kovakoodata nämä
@@ -214,20 +198,47 @@ class Culture(object):
         # Calculate absolute start time
         start_time = time.perf_counter() + relative_start_time
 
-        # Construct attribute vectors (matches GLSL
+        # Randomize rotation by default
+        if rotation is None:
+            rotation = np.random.rand()*2*np.pi
+
+        # Construct attribute vectors (matches GLSL)
         position_vec = [position[0], position[1], rotation, scale]
         param1_vec = [start_frame, end_frame, start_time, loop_time]
         param2_vec = [num_loops, start_frame, end_frame]
 
         # Add animation data to shared array
-        self.animation_gfx[ind, :11] = position_vec + param1_vec + param2_vec
+        self.animation_gfx[index, :11] = position_vec + param1_vec + param2_vec
 
         # Advance to next animation array position
         self.next_animation += 1
         if self.next_animation >= max_animations:
             self.next_animation = 0
 
-        return ind
+        return index
+
+    def add_food(self, position, rotation=None):
+        # Add food to next slot
+        index = self.next_food
+
+        print('Addind food at {} (index {})'.format(position, index))
+
+        # Randomize rotation by default
+        if rotation is None:
+            rotation = np.random.rand() * 2 * np.pi
+
+        # Construct attribute vectors (matches GLSL)
+        position_vec = [position[0], position[1], rotation, 0.25]
+
+        # Add animation data to shared array
+        self.food_gfx[index, :] = position_vec
+
+        # Advance to next food array position
+        self.next_food += 1
+        if self.next_food >= max_food:
+            self.next_food = 0
+
+        return index
 
     def remove_creature(self, index):
         print('Removing creature at index {}'.format(index))

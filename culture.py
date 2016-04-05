@@ -52,7 +52,7 @@ def creature_system():
     instance_data_attributes = CREATURE_DATA
 
     shader = boa_gfx.gl_shader.shader_manager.get_shader('creature.shader')
-    texture = TextureArray.from_directory('./128x128/')
+    texture = TextureArray.from_directory('./textures/creatures')
 
     system = ParticleSystem(static_data, static_data_attributes,
                             instance_data, instance_data_attributes,
