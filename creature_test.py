@@ -279,9 +279,11 @@ class Culture(object):
                 # in essence: stay still for 5s before revealing the result
                 if (time.perf_counter() - self.creature_data[i]['started_colliding']) > 5:
                     # TODO: shoot in some direction
+                    # cp['target'].position += (0,-300)
+                    # map(lambda b: b.apply_impulse(0,-10000), cp['body'])
                     mood[i] = 1
                     self.creature_data[i]['ended_interaction'] = time.perf_counter()
-                    print('{} ended interaction (back to mood = 1) at ts {}'.format(i, mood[i], self.creature_data[i]['ended_interaction']))
+                    print('{} ended interaction (back to mood = 1) at ts {}'.format(i, self.creature_data[i]['ended_interaction']))
                     continue
 
             elif mood[i] == 1:
