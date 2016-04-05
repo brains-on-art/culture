@@ -44,7 +44,9 @@ class Program(object):
 
         creatures = culture.creature_system()
         food = culture.food_system()
+        food.position += (0.0, 0.0, -0.01)
         animations = culture.animation_system()
+        animations.position += (0.0, 0.0, 0.01)
 
         while running:
             self.time_keeper.update()
