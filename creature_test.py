@@ -126,8 +126,8 @@ class Culture(object):
         for i in range(5):
             self.add_jelly(i, tuple(np.random.rand(2)*20.0 - 10.0))
 
-        #for i in range(5):
-        #    self.add_simple(i+5, tuple(np.random.rand(2)*20.0 - 10.0))
+        for i in range(5):
+            self.add_simple(i+5, tuple(np.random.rand(2)*20.0 - 10.0))
 
         for i in range(10):
             self.add_food(np.random.rand(2)*20.0 - 10.0)
@@ -216,6 +216,53 @@ class Culture(object):
             texture_vec = [self.get_texture('jelly'), 0.0, 1.0, 1.0]  # Texture index, color rotation, saturation, alpha
             self.creature_parts[max_parts*index+i, :] = position_vec + texture_vec + animation_vec
 
+    def add_simple(self, index, position):
+        print('Creating simple at {} (index {})'.format(position, index))
+
+        if self.creature_data[index]['alive'] == 1:
+            self.remove_creature(index)
+
+        cp = self.creature_physics[index]
+
+        cp['target'] = pm.Body(10.0, 10.0)
+        cp['target'].position = position
+        cp['target'].position += (0.0, 30.0)
+
+        cp['body'] = [pm.Body(10.0, 5.0) for x in range(max_parts)]
+        head = cp['body'][0]
+        head.position = position
+        for i in range(1, 5):
+            cp['body'][i].position = offscreen_position
+
+        head_offset = pm.Vec2d((0.0, 0.4))
+        cp['constraint'] = [pm.constraint.DampedSpring(head, cp['target'], head_offset, (0.0, 0.0), 0.0, 10.0, 15.0)]
+
+        self.pm_space.add(cp['body'])
+        self.pm_space.add(cp['constraint'])
+
+        cp['active'] = True
+
+        self.creature_data[index]['alive'] = 1
+        self.creature_data[index]['max_age'] = np.random.random(1) * 180 + 180
+        self.creature_data[index]['age'] = 0
+        self.creature_data[index]['size'] = 0.5
+        self.creature_data[index]['mood'] = 1
+        self.creature_data[index]['started_colliding'] = 0.0
+        self.creature_data[index]['ended_interaction'] = 0.0
+        self.creature_data[index]['agility_base'] = np.random.random()
+        self.creature_data[index]['virility_base'] = np.random.random()
+        self.creature_data[index]['mojo'] = np.random.random()
+        self.creature_data[index]['aggressiveness_base'] = np.random.random()
+        self.creature_data[index]['power'] = np.random.random()
+        self.creature_data[index]['hunger'] = 0.5
+        self.creature_data[index]['type'] = 1
+
+        position_vec = [position[0], position[1], 0.0, 0.5]  # Position, rotation, scale
+        animation_vec = [0.0, 1.0, 1.0, 1.0]  # Animation time offset, beat frequency, swirl radius, swirl frequency
+        tex = self.get_texture('simple')
+        print(tex)
+        texture_vec = [tex + 1, 0.0, 1.0, 1.0]
+        self.creature_parts[max_parts*index, :] = position_vec + texture_vec + animation_vec
 
     def add_animation(self, type, position, rotation=None, scale=1.0, relative_start_time=0.0, num_loops=1):
         # Add animation to next slot
@@ -326,9 +373,9 @@ class Culture(object):
 
         #t1 = time.perf_counter()
         # Find colliding creatures and deal with them
-        #collisions = self.get_collision_matrix()
+        collisions = self.get_collision_matrix()
         #t2 = time.perf_counter()
-        print('collision_update', (t2 - t1) * 1000)
+        #print('collision_update', (t2 - t1) * 1000)
         ids_in_collision = np.nonzero([sum(i) for i in collisions])[0]
         if ids_in_collision.any():
             for id in ids_in_collision:
