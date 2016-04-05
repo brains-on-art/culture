@@ -8,6 +8,8 @@ import zmq
 import numba
 import numpy as np
 import SharedArray as sa
+from scipy.spatial.distance import cdist as distm
+
 
 sys.path.append('./pymunk')
 import pymunk as pm
@@ -324,16 +326,17 @@ class Culture(object):
 
         #t1 = time.perf_counter()
         # Find colliding creatures and deal with them
-        collisions = self.get_collision_matrix()
+        #collisions = self.get_collision_matrix()
         #t2 = time.perf_counter()
-        #print('collision_update', (t2 - t1) * 1000)
+        print('collision_update', (t2 - t1) * 1000)
         ids_in_collision = np.nonzero([sum(i) for i in collisions])[0]
         if ids_in_collision.any():
             for id in ids_in_collision:
                 # creatures can start an interaction if they are at mood 1
-                if (mood[id] == 1) and (self.ct - last_interacted[id]) > resting_period:
-                    mood[id] = 0
-                    print('{} was noticed to be colliding (mood=0) at ts {}'.format(id, time.perf_counter()))
+                other = collisions[id].nonzero()[0][0]
+                if self.can_start_interaction([id, other]):
+                    mood[[id,other]] = 0
+                    print('{} were noticed to be colliding (mood=0) at ts {}'.format([id, other], time.perf_counter()))
             #modify colliders' alpha to see them
             self.creature_parts[ids_in_collision * max_parts, 7] = 0.2
 
@@ -360,9 +363,11 @@ class Culture(object):
                 # in essence: stay still for 5s before revealing the result
                 if (time.perf_counter() - self.creature_data[i]['started_colliding']) > 5:
                     # TODO: shoot in some direction
+                    # cp['target'].position += (0,-300)
+                    # map(lambda b: b.apply_impulse(0,-10000), cp['body'])
                     mood[i] = 1
                     self.creature_data[i]['ended_interaction'] = time.perf_counter()
-                    print('{} ended interaction (back to mood = 1) at ts {}'.format(i, mood[i], self.creature_data[i]['ended_interaction']))
+                    print('{} ended interaction (back to mood = 1) at ts {}'.format(i, self.creature_data[i]['ended_interaction']))
                     continue
 
             elif mood[i] == 1:
@@ -384,32 +389,21 @@ class Culture(object):
                      for creature in self.creature_physics]
         self.creature_parts[:, :2] = np.array(positions).reshape(max_creatures*max_parts, 2)
 
+    def can_start_interaction(self, arr_like):
+        mood = self.creature_data['mood']
+        last_interacted = self.creature_data['ended_interaction']
+        return (mood[arr_like] == 1).all() and ((self.ct - last_interacted[arr_like]) > resting_period).all()
 
     def get_collision_matrix(self):
-        collisions = np.zeros((max_creatures, max_creatures))
         alive = self.creature_data['alive']
         scale = self.creature_data['size']
-        # we only need one half of the matrix separated by the diagonal, but
-        # we still compute the whole thing D:
+
+        dists = distm(self.creature_parts[::5,:2], self.creature_parts[::5,:2], 'euclidean')
+        sizes = self.creature_data['size']
+        radii = np.array([[sizes[i]+sizes[j] for j in np.arange(max_creatures)] for i in np.arange(max_creatures)])
+        collisions = dists < radii
         for i in range(max_creatures):
-            for j in range(max_creatures):
-                #if this creature id hasn't been instantiated yet, its parts'll be None
-                if not np.all([creature['body'] for creature in np.array(self.creature_physics)[[i,j]]]):
-                    collisions[i,j] = False
-                    continue
-                head_i = self.creature_physics[i]['body'][0]
-                head_j = self.creature_physics[j]['body'][0]
-
-                # don't collide with self or if you're dead
-                if i == j or (not alive[i] or not alive[j]):
-                    collisions[i,j] = False
-                    continue
-
-                xdist = head_i.position.x - head_j.position.x
-                ydist = head_i.position.y - head_j.position.y
-
-                squaredist = np.sqrt((xdist * xdist) + (ydist * ydist))
-                collisions[i,j] = squaredist <= scale[i] + scale[j]
+            collisions[i,i] = False
         return collisions
 
     @staticmethod
