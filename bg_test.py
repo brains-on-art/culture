@@ -36,7 +36,7 @@ class Program(object):
         boa_gfx.gl_shader.shader_manager.shader_paths.append('./shaders')
         boa_gfx.gl_texture.texture_manager.texture_paths.append('./source_images')
 
-        self.windows[0].camera.position = (-1.5, 0.0, 13.0)
+        self.windows[0].camera.position = (-0.5, 0.0, 13.0)
         self.windows[0].fullscreen = True
 
         background = TexturedTriangleStrip(texture_name='background.png')
