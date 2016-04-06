@@ -76,7 +76,8 @@ class Culture(object):
                                 ('power', float),
                                 ('hunger', float),
                                 ('type', int),
-                                ('color', int)])
+                                ('color', int),
+                                ('interacting_with', int)])
         self.creature_data.alive = 0
         self.creature_data.max_age = 100.0
         self.creature_data.size = 0.5
@@ -241,6 +242,7 @@ class Culture(object):
         self.creature_data[index]['hunger'] = 0.5
         self.creature_data[index]['type'] = 1
         # self.creature_data[index]['color']
+        self.creature_data[index]['interacting_with'] = -1
 
         position_vec = [position[0], position[1], 0.0, 0.5]  # Position, rotation, scale
         animation_vec = [0.0, 1.0, 1.0, 1.0]  # Animation time offset, beat frequency, swirl radius, swirl frequency
@@ -295,6 +297,7 @@ class Culture(object):
         self.creature_data[index]['power'] = np.random.random()
         self.creature_data[index]['hunger'] = 0.5
         self.creature_data[index]['type'] = 3
+        self.creature_data[index]['interacting_with'] = -1
 
         position_vec = [position[0], position[1], 0.0, 0.5]  # Position, rotation, scale
         animation_vec = [0.0, 1.0, 1.0, 1.0]  # Animation time offset, beat frequency, swirl radius, swirl frequency
@@ -349,6 +352,7 @@ class Culture(object):
         self.creature_data[index]['power'] = np.random.random()
         self.creature_data[index]['hunger'] = 0.5
         self.creature_data[index]['type'] = 2
+        self.creature_data[index]['interacting_with'] = -1
 
         position_vec = [position[0], position[1], 0.0, 0.5]  # Position, rotation, scale
         animation_vec = [0.0, 1.0, 1.0, 1.0]  # Animation time offset, beat frequency, swirl radius, swirl frequency
@@ -402,6 +406,7 @@ class Culture(object):
         self.creature_data[index]['hunger'] = 0.5
         self.creature_data[index]['type'] = 4
         # self.creature_data[index]['color']
+        self.creature_data[index]['interacting_with'] = -1
 
         position_vec = [position[0], position[1], 0.0, 0.5]  # Position, rotation, scale
         animation_vec = [0.0, 1.0, 1.0, 1.0]  # Animation time offset, beat frequency, swirl radius, swirl frequency
@@ -417,7 +422,7 @@ class Culture(object):
         # Add animation to next slot
         index = self.next_animation
 
-        print('Adding {} animation at {} (index {})'.format(type, position, index))
+        # print('Adding {} animation at {} (index {})'.format(type, position, index))
         alpha_frame = omega_frame = 0.0
 
         # Get animation specific parameters
@@ -462,13 +467,13 @@ class Culture(object):
             param1_vec[2] += loop_time / 3.0
             old_index.append(index)
             index = index + 1 if index < max_animations - 1 else 0
-            print('Adding {} animation at {} (index {})'.format(type, position, index))
+            # print('Adding {} animation at {} (index {})'.format(type, position, index))
             self.animation_gfx[index, :11] = position_vec + param1_vec + param2_vec
 
             param1_vec[2] += loop_time / 3.0
             old_index.append(index)
             index = index + 1 if index < max_animations - 1 else 0
-            print('Adding {} animation at {} (index {})'.format(type, position, index))
+            # print('Adding {} animation at {} (index {})'.format(type, position, index))
             self.animation_gfx[index, :11] = position_vec + param1_vec + param2_vec
 
             self.next_animation = index + 1 if index < max_animations - 1 else 0
@@ -544,6 +549,7 @@ class Culture(object):
         mood = self.creature_data['mood']
         creature_type = self.creature_data['type']
         started_colliding = self.creature_data['started_colliding']
+        interacting_with = self.creature_data['interacting_with']
         last_interacted = self.creature_data['ended_interaction']
 
         # Update appearance changes from aging and remove dead creatures
@@ -553,7 +559,6 @@ class Culture(object):
         for ind in np.where(dead_creatures)[0]:
             self.remove_creature(ind)
 
-        #t1 = time.perf_counter()
         # Find colliding creatures and deal with them
         # time1 = time.perf_counter()
         collisions, distances, radii = self.get_collision_matrix()
@@ -576,9 +581,11 @@ class Culture(object):
                 if self.can_start_interaction([i,other]):
                     print('{} found to be colliding with {}, with distance {} (radii sum {})'.format(i, other, distances[i,other], radii[i,other]))
                     mood[[i,other]] = 0
+                    interacting_with[i] = other
+                    interacting_with[other] = i
                     started_colliding[[i, other]] = self.ct
 
-        # Move creatures that are able to move (mood == 1)
+        # Handle behaviours
         for i in range(max_creatures):
             cp = self.creature_physics[i]
             if not alive[i]:
@@ -590,19 +597,22 @@ class Culture(object):
                 print('{} started interaction'.format(i))
                 # so go to next state and fire animation
                 mood[i] = -1
-                self.add_animation('contact',
+                anim = 'fight' if np.random.random() < np.clip(aggr[i], 0.0, 0.8) else 'contact'
+                self.add_animation(anim,
                                    position=cp['body'][0].position,
                                    rotation=np.random.rand() * 2 * np.pi,
                                    num_loops=1)
+
             elif mood[i] == -1:
+                # already in an interaction
                 if (self.ct - started_colliding[i]) < 5:
-                    # not done with dancing
+                    # not yet done with dancing
                     map(lambda b: b.reset_forces(), cp['body'])
                     for body in cp['body']:
                         body.velocity = (0, 0)
                 else:
                     #end interaction
-                    self.add_animation('fight',
+                    self.add_animation('death',
                                        position=cp['body'][0].position,
                                        rotation=np.random.rand() * 2 * np.pi,
                                        num_loops=1)
