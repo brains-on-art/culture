@@ -622,9 +622,9 @@ class Culture(object):
                     #                    position=cp['body'][0].position,
                     #                    rotation=np.random.rand() * 2 * np.pi,
                     #                    num_loops=1)
-                    mood[i] = 1
-                    last_interacted[i] = self.ct
-                    # self.end_interaction(i, interacting_with[i])
+                    # mood[i] = 1
+                    # last_interacted[i] = self.ct
+                    self.end_interaction(i, interacting_with[i])
 
             elif mood[i] == 1:
                 # Default mood, move creatures according to their type
@@ -665,8 +665,7 @@ class Culture(object):
                 self.add_animation('fight',
                                    position=(self.creature_physics[i]['body'][0].position.x, self.creature_physics[i]['body'][0].position.y),
                                    rotation=np.random.rand() * 2 * np.pi,
-                                   num_loops=1,
-                                   relative_start_time=0.1)
+                                   num_loops=1)
             if checks[i]['virility']:
                 # anim = 'reproduction'
                 self.add_animation('reproduction',
@@ -680,12 +679,12 @@ class Culture(object):
                                    num_loops=1)
             mood[i] = -1
 
-    # def end_interaction(self, a, b):
-        # mood = self.creature_data['mood']
-        # checks = {a: {'aggr': self.aggr_check(a),
-        #             'virility': self.virility_check(a)},
-        #             b: {'aggr': self.aggr_check(b),
-        #             'virility': self.virility_check(b)}}
+    def end_interaction(self, a, b):
+        mood = self.creature_data['mood']
+        checks = {a: {'aggr': self.aggr_check(a),
+                    'virility': self.virility_check(a)},
+                    b: {'aggr': self.aggr_check(b),
+                    'virility': self.virility_check(b)}}
 
         # CASES:
         # 1. Both want a fight
@@ -696,8 +695,7 @@ class Culture(object):
             self.add_animation('death',
                                position=(self.creature_physics[loser]['body'][0].position.x, self.creature_physics[loser]['body'][0].position.y),
                                rotation=np.random.rand() * 2 * np.pi,
-                               num_loops=1,
-                               relative_start_time=0.08)
+                               num_loops=1)
             self.remove_creature(loser)
 
         # 2. One wants to fight, other wants to run away
@@ -713,7 +711,7 @@ class Culture(object):
                 print('{} got away'.format(escaper))
             else:
                 self.add_animation('death',
-                                   position=self.creature_physics[escaper]['body'][0].position,
+                                   position=(self.creature_physics[escaper]['body'][0].position.x, self.creature_physics[escaper]['body'][0].position.y),
                                    rotation=np.random.rand() * 2 * np.pi,
                                    num_loops=1)
                 self.remove_creature(escaper)
@@ -722,6 +720,8 @@ class Culture(object):
         # 4. Both want to reproduce
         elif checks[a]['virility'] and checks[b]['virility']:
             print('neither wanted to fight')
+
+        mood[[a,b]] = 1 # go back to normal
 
     # Roll a die and see if it's below creatures stat. If it is, success.
     def aggr_check(self, i):
