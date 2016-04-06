@@ -96,12 +96,27 @@ class Culture(object):
         physics_skeleton = {'active': False,
                             'target': None,
                             'body': None,
-                            'constraint': None}
+                            'constraint': None,
+                            'shape': None}
         self.creature_physics = [physics_skeleton.copy() for x in range(max_creatures)]
 
         self.pm_space = pm.Space()
         self.pm_space.damping = 0.4
         # self.pm_space.gravity = 0.0, -1.0
+
+        # Create walls but ignore collisions between creatures
+        def ignore_collision(*args):
+            return False
+        self.pm_space.add_collision_handler(1, 1, begin=ignore_collision)
+
+        walls = [pm.Segment(self.pm_space.static_body, (-13, 13), (13, 13), 0.1)
+                ,pm.Segment(self.pm_space.static_body, (13, 13), (13, -13), 0.1)
+                ,pm.Segment(self.pm_space.static_body, (13, -13), (-13, -13), 0.1)
+                ,pm.Segment(self.pm_space.static_body, (-13, -13), (-13, 13), 0.1)
+                ]
+        for wall in walls:
+            wall.collision_type = 2
+        self.pm_space.add(walls)
 
         # Create food graphics array to share with visualization
         self.food_gfx = create_new_sa_array('food_gfx', (max_food, 4), np.float32)
@@ -135,27 +150,27 @@ class Culture(object):
         for i in range(10):
             self.add_food(np.random.rand(2)*20.0 - 10.0)
 
-        for i in range(3):
-            self.add_animation('birth',
-                               position=np.random.rand(2) * 20.0 - 10.0,
-                               rotation=np.random.rand() * 2 * np.pi,
-                               num_loops=5)
-            self.add_animation('death',
-                               position=np.random.rand(2) * 20.0 - 10.0,
-                               rotation=np.random.rand() * 2 * np.pi,
-                               num_loops=5)
-            self.add_animation('contact',
-                               position=np.random.rand(2) * 20.0 - 10.0,
-                               rotation=np.random.rand() * 2 * np.pi,
-                               num_loops=5)
-            self.add_animation('fight',
-                               position=np.random.rand(2) * 20.0 - 10.0,
-                               rotation=np.random.rand() * 2 * np.pi,
-                               num_loops=5)
-            self.add_animation('reproduction',
-                               position=np.random.rand(2) * 20.0 - 10.0,
-                               rotation=np.random.rand() * 2 * np.pi,
-                               num_loops=5)
+        # for i in range(3):
+        #     self.add_animation('birth',
+        #                        position=np.random.rand(2) * 20.0 - 10.0,
+        #                        rotation=np.random.rand() * 2 * np.pi,
+        #                        num_loops=5)
+        #     self.add_animation('death',
+        #                        position=np.random.rand(2) * 20.0 - 10.0,
+        #                        rotation=np.random.rand() * 2 * np.pi,
+        #                        num_loops=5)
+        #     self.add_animation('contact',
+        #                        position=np.random.rand(2) * 20.0 - 10.0,
+        #                        rotation=np.random.rand() * 2 * np.pi,
+        #                        num_loops=5)
+        #     self.add_animation('fight',
+        #                        position=np.random.rand(2) * 20.0 - 10.0,
+        #                        rotation=np.random.rand() * 2 * np.pi,
+        #                        num_loops=5)
+        #     self.add_animation('reproduction',
+        #                        position=np.random.rand(2) * 20.0 - 10.0,
+        #                        rotation=np.random.rand() * 2 * np.pi,
+        #                        num_loops=5)
 
     def get_texture(self, group, variant=None, part=None):
         if group == 'jelly':
@@ -203,6 +218,10 @@ class Culture(object):
                             pm.constraint.SlideJoint(head, mid, (-0.4, -0.3), (-0.4, 0.3), 0.1, 0.2),
                             pm.constraint.SlideJoint(mid, tail, (0.0, -0.1), (0.0, 0.1), 0.1, 0.5)]
 
+        shape = pm.Circle(head, self.creature_parts[index*max_parts, 3]) # use the scale of the first creature part
+        shape.collision_type = 1
+        cp['shape'] = shape
+        self.pm_space.add(cp['shape'])
         self.pm_space.add(cp['body'][0:3])
         self.pm_space.add(cp['constraint'])
 
@@ -255,6 +274,11 @@ class Culture(object):
                             pm.constraint.PivotJoint(top, bottom, (0.0, 0.0), (0.0, 0.0)),
                             pm.constraint.GearJoint(top, bottom, 0.0, 1.0)]
 
+        shape = pm.Circle(top, self.creature_parts[index*max_parts, 3]) # use the scale of the first creature part
+        shape.collision_type = 1
+        cp['shape'] = shape
+
+        self.pm_space.add(cp['shape'])
         self.pm_space.add(cp['body'][0:2])
         self.pm_space.add(cp['constraint'])
 
@@ -304,6 +328,11 @@ class Culture(object):
         head_offset = pm.Vec2d((0.0, 0.4))
         cp['constraint'] = [pm.constraint.DampedSpring(head, cp['target'], head_offset, (0.0, 0.0), 0.0, 10.0, 15.0)]
 
+        shape = pm.Circle(head, self.creature_parts[index*max_parts, 3]) # use the scale of the first creature part
+        shape.collision_type = 1
+        cp['shape'] = shape
+
+        self.pm_space.add(cp['shape'])
         self.pm_space.add(cp['body'][0:1])
         self.pm_space.add(cp['constraint'])
 
@@ -423,12 +452,14 @@ class Culture(object):
         print('Removing creature at index {}'.format(index))
         cp = self.creature_physics[index]
         self.pm_space.remove(cp['constraint'])
-        self.pm_space.remove(cp['body'])
+        self.pm_space.remove(cp['shape'])
+        # self.pm_space.remove(cp['body'])
 
         cp['active'] = False
         cp['target'] = None
         cp['body'] = None
         cp['constraint'] = None
+        cp['shape'] = None
 
         self.creature_data[index] = np.zeros(len(self.creature_data.dtype.names))
         self.creature_parts[index:index+max_parts, :3] = offscreen_position
@@ -492,18 +523,6 @@ class Culture(object):
                     mood[[i,other]] = 0
                     started_colliding[[i, other]] = self.ct
 
-            # if self.can_start_interaction([i, other]):
-            #     print('{} started an interaction'.format([i, other]) )
-            #     mood[[i,other]] = 0
-            #     # print('{} were noticed to be colliding (mood=0) at ts {}'.format([i, other], time.perf_counter()))
-            #     # print('handling collision between {}'.format([i, other]))
-            #     self.start_interaction([i, other])
-            # elif self.creature_data[i]['mood'] == -1:
-            #     self.process_interactions([i, other])
-            # else:
-            #         print('{} couldnt start with {}, and {} wasnt in mood -1'.format(i, other, i))
-            #modify colliders' alpha to see them
-
         # Move creatures that are able to move (mood == 1)
         for i in range(max_creatures):
             cp = self.creature_physics[i]
@@ -516,7 +535,7 @@ class Culture(object):
                 print('{} started interaction'.format(i))
                 # so go to next state and fire animation
                 mood[i] = -1
-                self.add_animation('birth',
+                self.add_animation('contact',
                                    position=cp['body'][0].position,
                                    rotation=np.random.rand() * 2 * np.pi,
                                    num_loops=1)
@@ -528,7 +547,7 @@ class Culture(object):
                         body.velocity = (0, 0)
                 else:
                     #end interaction
-                    self.add_animation('death',
+                    self.add_animation('fight',
                                        position=cp['body'][0].position,
                                        rotation=np.random.rand() * 2 * np.pi,
                                        num_loops=1)
