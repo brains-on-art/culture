@@ -39,8 +39,12 @@ class Program(object):
         boa_gfx.gl_shader.shader_manager.shader_paths.append('./shaders')
         boa_gfx.gl_texture.texture_manager.texture_paths.append('./textures')
 
-        self.windows[0].camera.position = (0.0, 0.0, 13.0)
+        self.windows[0].camera.position = (-0.43, 0.0, 13.0)
         self.windows[0].fullscreen = True
+
+        background = TexturedTriangleStrip(texture_name='background.png')
+        background.position = (0.0, 0.0, 0.0)
+        background.scale = (13.4, 13.0, 1.0)
 
         creatures = culture.creature_system()
         food = culture.food_system()
