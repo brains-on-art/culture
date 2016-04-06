@@ -133,7 +133,8 @@ class Culture(TimeAware):
         self.animation_gfx[:, 3:] = 1.0  # Avoid undefined behavior by setting everything to one
         self.next_animation = 0
 
-        self.demo_init()
+        self.scheduler.enter(3.0, 0.0, self.demo_init)
+        #self.demo_init()
 
         self.prev_update = time.perf_counter()
         self.ct = time.perf_counter()
@@ -242,7 +243,9 @@ class Culture(TimeAware):
 
         f = lambda: self.activate_creature_physics(index)
 
-        self.scheduler.enter(5, 0.0, f)
+        self.scheduler.enter(4.0, 0.0, f)
+
+        self.add_animation('birth', position, relative_start_time=3.0)
 
     def activate_creature_physics(self, index):
         cp = self.creature_physics[index]
@@ -347,6 +350,7 @@ class Culture(TimeAware):
             self.creature_parts[max_parts * index + (i+1), :] = position_vec + texture_vec + animation_vec
 
     def add_animation(self, type, position, rotation=None, scale=1.0, relative_start_time=0.0, num_loops=1):
+        print('Adding animation {} at position {}'.format(type, position))
         # Add animation to next slot
         index = self.next_animation
 
@@ -355,6 +359,7 @@ class Culture(TimeAware):
 
         # Get animation specific parameters
         if type == 'birth':
+            alpha_frame = 1.0
             start_frame, end_frame = 1.0, 16.0 # FIXME: halutaanko kovakoodata nämä
             loop_time = 1.0
         elif type == 'contact':
@@ -362,13 +367,13 @@ class Culture(TimeAware):
             loop_time = 2.0
         elif type == 'death':
             scale *= 1.5
-            start_frame, end_frame = 35.0, 56.0
+            start_frame, end_frame = 35.0, 49.0
             loop_time = 3.0
         elif type == 'fight':
-            start_frame, end_frame = 57.0, 74.0
+            start_frame, end_frame = 50.0, 67.0
             loop_time = 2.0
         elif type == 'reproduction':
-            start_frame, end_frame = 75.0, 92.0
+            start_frame, end_frame = 68.0, 85.0
             loop_time = 2.0
         else:
             return None
@@ -448,7 +453,11 @@ class Culture(TimeAware):
 
         self.creature_data[index] = np.zeros(len(self.creature_data.dtype.names))
         self.creature_data[index]['max_age'] = 1.0
-        self.creature_parts[index:index+max_parts, :3] = offscreen_position
+
+        def f():
+            self.creature_parts[index*max_parts:(index+1)*max_parts-1, :3] = offscreen_position
+
+        self.scheduler.enter(8.0, 0.0, f)
 
     def update(self, dt):
         self.ct = time.perf_counter()
@@ -481,9 +490,9 @@ class Culture(TimeAware):
         last_interacted = self.creature_data['ended_interaction']
 
         # Update appearance changes from aging and remove dead creatures
-        self.creature_parts[:, 6] = np.clip(1.0 - (cur_age / max_age), 0.0, 1.0).repeat(5)
-        self.creature_parts[:, 7] = np.clip(1.0 - (cur_age - max_age)/5.0, 0.0, 1.0).repeat(5)
-        dead_creatures = (alive == 1.0) & (cur_age > max_age + 5.0)
+        self.creature_parts[:, 6] = np.clip(1.0 - (cur_age / max_age), 0.0, 1.0).repeat(max_parts)
+        self.creature_parts[:, 7] = np.clip(1.0 - (cur_age - max_age)/3.0, 0.0, 1.0).repeat(max_parts)
+        dead_creatures = (alive == 1.0) & (cur_age > max_age + 3.0)
         for ind in np.where(dead_creatures)[0]:
             self.remove_creature(ind)
 
