@@ -1,13 +1,11 @@
 import sdl2
 from boa_gfx.gl_core import GLWindow
 from boa_gfx.core import EventManager
-from boa_gfx.gl_mesh import TriangleStrip, TexturedTriangleStrip
-from boa_gfx.gl_ui import ProgressBar
-from boa_gfx.transformer import Dynamo, linear, sinusoidal
+from boa_gfx.gl_mesh import TexturedTriangleStrip
+from boa_gfx.transformer import Dynamo
 import boa_gfx.gl_shader
 import boa_gfx.gl_texture
 
-import culture
 from boa_gfx.time import TimeKeeper
 
 
@@ -31,31 +29,25 @@ class Program(object):
             nonlocal running
             running = not running
 
-        #print(sdl2.SDL_GL_GetSwapInterval())
 
         self.event_manager.add_quit_callback(toggle_running)
         self.event_manager.add_keydown_callback(sdl2.SDLK_q, toggle_running)
         boa_gfx.gl_shader.shader_manager.shader_paths.append('./boa_gfx/shaders')
         boa_gfx.gl_shader.shader_manager.shader_paths.append('./shaders')
-        boa_gfx.gl_texture.texture_manager.texture_paths.append('./textures')
+        boa_gfx.gl_texture.texture_manager.texture_paths.append('./source_images')
 
-        self.windows[0].camera.position = (0.0, 0.0, 13.0)
+        self.windows[0].camera.position = (-0.5, 0.0, 13.0)
         self.windows[0].fullscreen = True
 
-        creatures = culture.creature_system()
-        food = culture.food_system()
-        food.position += (0.0, 0.0, -0.01)
-        animations = culture.animation_system()
-        animations.position += (0.0, 0.0, 0.01)
+        background = TexturedTriangleStrip(texture_name='background.png')
+        background.position = (0.0, 0.0, 0.0)
+        background.scale = 13
+
 
         while running:
             self.time_keeper.update()
             self.dynamo.run()
             self.event_manager.process_events()
-
-            creatures.update_instance_data()
-            food.update_instance_data()
-            animations.update_instance_data()
 
             for w in self.windows:
                 w.render()

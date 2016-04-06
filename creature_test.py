@@ -1,3 +1,4 @@
+import os
 import signal
 import subprocess
 import sys
@@ -16,7 +17,7 @@ import pymunk as pm
 zmq_port = '5556'
 max_creatures = 25
 max_parts = 5
-offscreen_position = (30.0, 30.0)
+offscreen_position = (30.0, 30.0, 0.0)
 
 max_food = 100
 max_animations = 100
@@ -53,8 +54,8 @@ class Culture(object):
         # Create creature parts array to share with visualization
         self.creature_parts = create_new_sa_array('creature_parts', (max_creatures*max_parts, 12), np.float32)
         # FIXME: refactor to creature_gfx
-        self.creature_parts[:, :2] = offscreen_position  # Off-screen coordinates
-        self.creature_parts[:, 2:] = 1.0  # Avoid undefined behavior by setting everything to one
+        self.creature_parts[:, :3] = offscreen_position  # Off-screen coordinates
+        self.creature_parts[:, 3:] = 1.0  # Avoid undefined behavior by setting everything to one
 
         # Creature data (no position!)
         # self.creature_data = np.zeros((max_creatures, 4))
@@ -80,6 +81,17 @@ class Culture(object):
         self.creature_data.max_age = 100.0
         self.creature_data.size = 0.5
 
+        root, dirs, files = next(os.walk('./textures/creatures/'))
+        png_files = sorted([x for x in files if '.png' in x])
+        textures = [x.replace('.png', '').split('_') + [i] for i, x in enumerate(png_files)]
+        self.texture_ind = {'jelly': [x[4] for x in textures if x[0] == 'jelly'],
+                            'simple': [x[4] for x in textures if x[0] == 'simple'],
+                            'sperm': [x[4] for x in textures if x[0] == 'sperm'],
+                            'feet': {'fat': {'bottom': [x[4] for x in textures if x[:3] == ['feet', 'fat', 'bottom']],
+                                             'top': [x[4] for x in textures if x[:3] == ['feet', 'fat', 'top']]},
+                                     'thin': {'bottom': [x[4] for x in textures if x[:3] == ['feet', 'thin', 'bottom']],
+                                              'top': [x[4] for x in textures if x[:3] == ['feet', 'thin', 'top']]}}}
+
         #
         physics_skeleton = {'active': False,
                             'target': None,
@@ -93,14 +105,14 @@ class Culture(object):
 
         # Create food graphics array to share with visualization
         self.food_gfx = create_new_sa_array('food_gfx', (max_food, 4), np.float32)
-        self.food_gfx[:, :2] = offscreen_position # Off-screen coordinates
-        self.food_gfx[:, 2:] = 1.0  # Avoid undefined behavior by setting everything to one
+        self.food_gfx[:, :3] = offscreen_position # Off-screen coordinates
+        self.food_gfx[:, 3:] = 1.0  # Avoid undefined behavior by setting everything to one
         self.next_food = 0
 
         # Create animation graphics array to share with visualization
         self.animation_gfx = create_new_sa_array('animation_gfx', (max_animations, 12), np.float32)
-        self.animation_gfx[:, :2] = offscreen_position  # Off-screen coordinates
-        self.animation_gfx[:, 2:] = 1.0  # Avoid undefined behavior by setting everything to one
+        self.animation_gfx[:, :3] = offscreen_position  # Off-screen coordinates
+        self.animation_gfx[:, 3:] = 1.0  # Avoid undefined behavior by setting everything to one
         self.next_animation = 0
 
         self.demo_init()
@@ -111,25 +123,63 @@ class Culture(object):
         # self.dt = p0.0
 
     def demo_init(self):
-        self.add_jelly(0, (0.0, 0.0))
+        for i in range(5):
+            self.add_jelly(i, tuple(np.random.rand(2)*20.0 - 10.0))
+
+        for i in range(5):
+            self.add_simple(i+5, tuple(np.random.rand(2)*20.0 - 10.0))
+
+        for i in range(5):
+            self.add_feet(i + 10, tuple(np.random.rand(2) * 20.0 - 10.0))
 
         for i in range(10):
             self.add_food(np.random.rand(2)*20.0 - 10.0)
 
-        # for i in range(3):
-        #     self.add_animation('birth',
-        #                        position=np.random.rand(2) * 20.0 - 10.0,
-        #                        rotation=np.random.rand() * 2 * np.pi,
-        #                        num_loops=5)
-        #     self.add_animation('death',
-        #                        position=np.random.rand(2) * 20.0 - 10.0,
-        #                        rotation=np.random.rand() * 2 * np.pi,
-        #                        num_loops=20)
+        for i in range(3):
+            self.add_animation('birth',
+                               position=np.random.rand(2) * 20.0 - 10.0,
+                               rotation=np.random.rand() * 2 * np.pi,
+                               num_loops=5)
+            self.add_animation('death',
+                               position=np.random.rand(2) * 20.0 - 10.0,
+                               rotation=np.random.rand() * 2 * np.pi,
+                               num_loops=5)
+            self.add_animation('contact',
+                               position=np.random.rand(2) * 20.0 - 10.0,
+                               rotation=np.random.rand() * 2 * np.pi,
+                               num_loops=5)
+            self.add_animation('fight',
+                               position=np.random.rand(2) * 20.0 - 10.0,
+                               rotation=np.random.rand() * 2 * np.pi,
+                               num_loops=5)
+            self.add_animation('reproduction',
+                               position=np.random.rand(2) * 20.0 - 10.0,
+                               rotation=np.random.rand() * 2 * np.pi,
+                               num_loops=5)
+
+    def get_texture(self, group, variant=None, part=None):
+        if group == 'jelly':
+            return np.random.choice(self.texture_ind['jelly'])
+        elif group == 'simple':
+            return np.random.choice(self.texture_ind['simple'])
+        elif group == 'sperm':
+            return np.random.choice(self.texture_ind['sperm'])
+        elif group == 'feet':
+            if variant is None:
+                variant = np.random.choice(['fat', 'thin'])
+            if part is None:  # Return both
+                return [np.random.choice(self.texture_ind['feet'][variant]['bottom']),
+                        np.random.choice(self.texture_ind['feet'][variant]['top'])]
+            else:
+                return np.random.choice(self.texture_ind['feet'][variant][part])
+        else:
+            print('get_texture: no group named:', group)
+            return None
 
     def add_jelly(self, index, position):
         print('Creating jelly at index {}'.format(index))
         # if self.creature_data[index, 0] == 1.0:
-        if self.creature_data[index]['alive']  == 1:
+        if self.creature_data[index]['alive'] == 1:
             self.remove_creature(index)
 
         cp = self.creature_physics[index]
@@ -146,13 +196,14 @@ class Culture(object):
         cp['body'][3].position = (30.0, 30.0)  # UNUSED
         cp['body'][4].position = (30.0, 30.0)  # UNUSED
 
-        head_offset = pm.vec2d.Vec2d((0.0, 0.8)) * float(0.5)
+        head_offset = pm.Vec2d((0.0, 0.4))
+        print(head_offset)
         cp['constraint'] = [pm.constraint.DampedSpring(head, cp['target'], head_offset, (0.0, 0.0), 0.0, 10.0, 15.0),
                             pm.constraint.SlideJoint(head, mid, (0.4, -0.3), (0.4, 0.3), 0.1, 0.2),
                             pm.constraint.SlideJoint(head, mid, (-0.4, -0.3), (-0.4, 0.3), 0.1, 0.2),
                             pm.constraint.SlideJoint(mid, tail, (0.0, -0.1), (0.0, 0.1), 0.1, 0.5)]
 
-        self.pm_space.add(cp['body'])
+        self.pm_space.add(cp['body'][0:3])
         self.pm_space.add(cp['constraint'])
 
         cp['active'] = True
@@ -174,25 +225,133 @@ class Culture(object):
         self.creature_data[index]['type'] = 1
         # self.creature_data[index]['color']
 
+        position_vec = [position[0], position[1], 0.0, 0.5]  # Position, rotation, scale
+        animation_vec = [0.0, 1.0, 1.0, 1.0]  # Animation time offset, beat frequency, swirl radius, swirl frequency
         for i in range(3):
-            # Position, rotation, scale
-            self.creature_parts[max_parts*index+i, :4] = [position[0], position[1], 0.0, 0.5]
-            # Texture index, color rotation, saturation, alpha
-            self.creature_parts[max_parts*index+i, 4:8] = [np.random.randint(0, 10), 0.0, 1.0, 1.0]
-            # Animation time offset, beat frequency, swirl radius, swirl frequency
-            self.creature_parts[max_parts*index+i, 8:12] = [0.0, 1.0, 1.0, 1.0]
+            texture_vec = [self.get_texture('jelly'), 0.0, 1.0, 1.0]  # Texture index, color rotation, saturation, alpha
+            self.creature_parts[max_parts*index+i, :] = position_vec + texture_vec + animation_vec
+
+    def add_feet(self, index, position):
+        print('Creating jelly at index {}'.format(index))
+        # if self.creature_data[index, 0] == 1.0:
+        if self.creature_data[index]['alive'] == 1:
+            self.remove_creature(index)
+
+        cp = self.creature_physics[index]
+
+        cp['target'] = pm.Body(10.0, 10.0)
+        cp['target'].position = position
+        cp['target'].position += (0.0, 30.0)
+
+        cp['body'] = [pm.Body(10.0, 5.0) for x in range(max_parts)]
+        top, bottom = cp['body'][0:2]
+        top.position = position
+        bottom.position = position
+        for i in range(1, 5):
+            cp['body'][i].position = offscreen_position[:2]
+
+        head_offset = pm.Vec2d((0.0, 0.4))
+        cp['constraint'] = [pm.constraint.DampedSpring(top, cp['target'], head_offset, (0.0, 0.0), 0.0, 10.0, 15.0),
+                            pm.constraint.PivotJoint(top, bottom, (0.0, 0.0), (0.0, 0.0)),
+                            pm.constraint.GearJoint(top, bottom, 0.0, 1.0)]
+
+        self.pm_space.add(cp['body'][0:2])
+        self.pm_space.add(cp['constraint'])
+
+        cp['active'] = True
+
+        self.creature_data[index]['alive'] = 1
+        self.creature_data[index]['max_age'] = np.random.random(1) * 180 + 180
+        self.creature_data[index]['age'] = 0
+        self.creature_data[index]['size'] = 0.5
+        self.creature_data[index]['mood'] = 1
+        self.creature_data[index]['started_colliding'] = 0.0
+        self.creature_data[index]['ended_interaction'] = 0.0
+        self.creature_data[index]['agility_base'] = np.random.random()
+        self.creature_data[index]['virility_base'] = np.random.random()
+        self.creature_data[index]['mojo'] = np.random.random()
+        self.creature_data[index]['aggressiveness_base'] = np.random.random()
+        self.creature_data[index]['power'] = np.random.random()
+        self.creature_data[index]['hunger'] = 0.5
+        self.creature_data[index]['type'] = 3
+
+        position_vec = [position[0], position[1], 0.0, 0.5]  # Position, rotation, scale
+        animation_vec = [0.0, 1.0, 1.0, 1.0]  # Animation time offset, beat frequency, swirl radius, swirl frequency
+        tex = self.get_texture('feet')
+        texture_vec = [tex[1], 0.0, 1.0, 1.0]
+        self.creature_parts[max_parts * index, :] = position_vec + texture_vec + animation_vec
+        texture_vec = [tex[0], 0.25, 1.0, 1.0]
+        self.creature_parts[max_parts * index + 1, :] = position_vec + texture_vec + animation_vec
+
+    def add_simple(self, index, position):
+        print('Creating simple at {} (index {})'.format(position, index))
+
+        if self.creature_data[index]['alive'] == 1:
+            self.remove_creature(index)
+
+        cp = self.creature_physics[index]
+
+        cp['target'] = pm.Body(10.0, 10.0)
+        cp['target'].position = position
+        cp['target'].position += (0.0, 30.0)
+
+        cp['body'] = [pm.Body(10.0, 5.0) for x in range(max_parts)]
+        head = cp['body'][0]
+        head.position = position
+        for i in range(1, 5):
+            cp['body'][i].position = offscreen_position[:2]
+
+        head_offset = pm.Vec2d((0.0, 0.4))
+        cp['constraint'] = [pm.constraint.DampedSpring(head, cp['target'], head_offset, (0.0, 0.0), 0.0, 10.0, 15.0)]
+
+        self.pm_space.add(cp['body'][0:1])
+        self.pm_space.add(cp['constraint'])
+
+        cp['active'] = True
+
+        self.creature_data[index]['alive'] = 1
+        self.creature_data[index]['max_age'] = np.random.random(1) * 180 + 180
+        self.creature_data[index]['age'] = 0
+        self.creature_data[index]['size'] = 0.5
+        self.creature_data[index]['mood'] = 1
+        self.creature_data[index]['started_colliding'] = 0.0
+        self.creature_data[index]['ended_interaction'] = 0.0
+        self.creature_data[index]['agility_base'] = np.random.random()
+        self.creature_data[index]['virility_base'] = np.random.random()
+        self.creature_data[index]['mojo'] = np.random.random()
+        self.creature_data[index]['aggressiveness_base'] = np.random.random()
+        self.creature_data[index]['power'] = np.random.random()
+        self.creature_data[index]['hunger'] = 0.5
+        self.creature_data[index]['type'] = 2
+
+        position_vec = [position[0], position[1], 0.0, 0.5]  # Position, rotation, scale
+        animation_vec = [0.0, 1.0, 1.0, 1.0]  # Animation time offset, beat frequency, swirl radius, swirl frequency
+        texture_vec = [self.get_texture('simple'), 0.0, 1.0, 1.0]
+        self.creature_parts[max_parts*index, :] = position_vec + texture_vec + animation_vec
 
     def add_animation(self, type, position, rotation=None, scale=1.0, relative_start_time=0.0, num_loops=1):
         # Add animation to next slot
         index = self.next_animation
 
-        # print('Adding {} animation at {} (index {})'.format(type, position, index))
+        print('Adding {} animation at {} (index {})'.format(type, position, index))
+        alpha_frame = omega_frame = 0.0
+
         # Get animation specific parameters
         if type == 'birth':
-            start_frame, end_frame = 0.0, 15.0 # FIXME: halutaanko kovakoodata nämä
+            start_frame, end_frame = 1.0, 16.0 # FIXME: halutaanko kovakoodata nämä
             loop_time = 1.0
+        elif type == 'contact':
+            start_frame, end_frame = 17.0, 34.0
+            loop_time = 2.0
         elif type == 'death':
-            start_frame, end_frame = 16.0, 37.0
+            scale *= 1.5
+            start_frame, end_frame = 35.0, 56.0
+            loop_time = 3.0
+        elif type == 'fight':
+            start_frame, end_frame = 57.0, 74.0
+            loop_time = 2.0
+        elif type == 'reproduction':
+            start_frame, end_frame = 75.0, 92.0
             loop_time = 2.0
         else:
             return None
@@ -207,15 +366,33 @@ class Culture(object):
         # Construct attribute vectors (matches GLSL)
         position_vec = [position[0], position[1], rotation, scale]
         param1_vec = [start_frame, end_frame, start_time, loop_time]
-        param2_vec = [num_loops, start_frame, end_frame]
+        param2_vec = [num_loops, alpha_frame, omega_frame]
 
         # Add animation data to shared array
         self.animation_gfx[index, :11] = position_vec + param1_vec + param2_vec
 
-        # Advance to next animation array position
-        self.next_animation += 1
-        if self.next_animation >= max_animations:
-            self.next_animation = 0
+        if type in ['contact', 'fight', 'reproduction']:
+            old_index = []
+
+            # Add a second copy with time shift
+            param1_vec[2] += loop_time / 3.0
+            old_index.append(index)
+            index = index + 1 if index < max_animations - 1 else 0
+            print('Adding {} animation at {} (index {})'.format(type, position, index))
+            self.animation_gfx[index, :11] = position_vec + param1_vec + param2_vec
+
+            param1_vec[2] += loop_time / 3.0
+            old_index.append(index)
+            index = index + 1 if index < max_animations - 1 else 0
+            print('Adding {} animation at {} (index {})'.format(type, position, index))
+            self.animation_gfx[index, :11] = position_vec + param1_vec + param2_vec
+
+            self.next_animation = index + 1 if index < max_animations - 1 else 0
+            old_index.append(index)
+            index = old_index
+        else:
+            # Advance to next animation array position
+            self.next_animation = index + 1 if index < max_animations - 1 else 0
 
         return index
 
@@ -230,7 +407,7 @@ class Culture(object):
             rotation = np.random.rand() * 2 * np.pi
 
         # Construct attribute vectors (matches GLSL)
-        position_vec = [position[0], position[1], rotation, 0.25]
+        position_vec = [position[0], position[1], rotation, 0.125]
 
         # Add animation data to shared array
         self.food_gfx[index, :] = position_vec
@@ -254,8 +431,7 @@ class Culture(object):
         cp['constraint'] = None
 
         self.creature_data[index] = np.zeros(len(self.creature_data.dtype.names))
-        self.creature_parts[index*max_parts:(index*max_parts)+max_parts-1, :2] = offscreen_position
-        # self.creature_parts[index:index+max_parts, :2] = offscreen_position
+        self.creature_parts[index:index+max_parts, :3] = offscreen_position
 
     def update(self, dt):
         self.ct = time.perf_counter()
@@ -291,6 +467,7 @@ class Culture(object):
         for ind in np.where(dead_creatures)[0]:
             self.remove_creature(ind)
 
+        #t1 = time.perf_counter()
         # Find colliding creatures and deal with them
         # time1 = time.perf_counter()
         collisions, distances, radii = self.get_collision_matrix()
@@ -367,13 +544,16 @@ class Culture(object):
                 #        self.creature_parts[3*i+j, :2] = tuple(self.pm_body[i][j].position)
                 #        self.creature_parts[3*i+j, 2] = self.pm_body[i][j].angle
 
+
         # Advance the physics simulation and sync physics with graphics
         self.pm_space.step(dt)
-        positions = [[(body.position.x, body.position.y) for body in creature['body']]
+
+        positions = [[(body.position.x, body.position.y, -body.angle) for body in creature['body']]
                      if creature['active']
                      else [offscreen_position for x in range(max_parts)]
                      for creature in self.creature_physics]
-        self.creature_parts[:, :2] = np.array(positions).reshape(max_creatures*max_parts, 2)
+        positions = np.array(positions).reshape(max_creatures*max_parts, 3)
+        self.creature_parts[:, :3] = positions
 
     def can_start_interaction(self, arr_like):
         mood = self.creature_data['mood']
