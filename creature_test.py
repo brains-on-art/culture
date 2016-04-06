@@ -140,11 +140,11 @@ class Culture(object):
 
     def demo_init(self):
         for i in range(5):
-            self.add_jelly(4*i, tuple(np.random.rand(2)*20.0 - 10.0))
-            self.add_simple(4*i + 1, tuple(np.random.rand(2) * 20.0 - 10.0))
-            self.add_feet(4*i + 2, tuple(np.random.rand(2) * 20.0 - 10.0))
-            self.add_sperm(4*i + 3, tuple(np.random.rand(2) * 20.0 - 10.0))
-
+            self.add_creature('jelly', tuple(np.random.rand(2)*20.0 - 10.0))
+            self.add_creature('feet', tuple(np.random.rand(2) * 20.0 - 10.0))
+            self.add_creature('simple', tuple(np.random.rand(2) * 20.0 - 10.0))
+            self.add_creature('sperm', tuple(np.random.rand(2) * 20.0 - 10.0))
+            
         for i in range(10):
             self.add_food(np.random.rand(2)*20.0 - 10.0)
 
@@ -189,10 +189,13 @@ class Culture(object):
             print('get_texture: no group named:', group)
             return None
 
-    def add_jelly(self, index, position):
-        print('Creating jelly at index {}'.format(index))
-        # if self.creature_data[index, 0] == 1.0:
-        if self.creature_data[index]['alive'] == 1:
+    def add_creature(self, type, position):
+        print('Adding creature ({}) at position {}'.format(type, position))
+
+        index = _find_first(self.creature_data['alive'], 0)
+        if index == -1: # Creature data is full
+            print('Creature data is full, instakilling oldest creature')
+            index = self.creature_data['age'].argmax()
             self.remove_creature(index)
 
         cp = self.creature_physics[index]
@@ -202,86 +205,22 @@ class Culture(object):
         cp['target'].position += (0.0, 30.0)
 
         cp['body'] = [pm.Body(10.0, 5.0) for x in range(max_parts)]
-        head, mid, tail = cp['body'][0:3]
-        head.position = position
-        mid.position = head.position + (0.0, -1.0)
-        tail.position = head.position + (0.0, -2.0)
-        cp['body'][3].position = (30.0, 30.0)  # UNUSED
-        cp['body'][4].position = (30.0, 30.0)  # UNUSED
+        for i in range(max_parts):
+            cp['body'][i].position = (30.0 + 20.0*index + 2*i, 30.0 + 20.0*index + 2*i)
 
+        head = cp['body'][0]
         head_offset = pm.Vec2d((0.0, 0.4))
-        print(head_offset)
-        cp['constraint'] = [pm.constraint.DampedSpring(head, cp['target'], head_offset, (0.0, 0.0), 0.0, 10.0, 15.0),
-                            pm.constraint.SlideJoint(head, mid, (0.0, -0.1), (0.0, 0.1), 0.1, 0.5),
-                            pm.constraint.RotaryLimitJoint(head, mid, -0.5, 0.5),
-                            pm.constraint.SlideJoint(mid, tail, (0.0, -0.1), (0.0, 0.1), 0.1, 0.5),
-                            pm.constraint.RotaryLimitJoint(mid, tail, -0.5, 0.5)]
+        cp['constraint'] = [pm.constraint.DampedSpring(head, cp['target'], head_offset, (0.0, 0.0), 0.0, 10.0, 15.0)]
 
-        shape = pm.Circle(head, self.creature_parts[index*max_parts, 3]) # use the scale of the first creature part
+        shape = pm.Circle(head, self.creature_parts[index * max_parts, 3])  # use the scale of the first creature part
         shape.collision_type = 1
         cp['shape'] = shape
-        self.pm_space.add(cp['shape'])
-        self.pm_space.add(cp['body'])
-        self.pm_space.add(cp['constraint'])
 
-        cp['active'] = True
-
-        # self.creature_data[index, :] = [1.0, np.random.random(1)*10+10, 0.0, 0.5]  # Alive, max_age, age, size
-        self.creature_data[index]['alive'] = 1
-        self.creature_data[index]['max_age'] = np.random.random(1)*180+180
-        self.creature_data[index]['age'] = 0
-        self.creature_data[index]['size'] = 0.5
-        self.creature_data[index]['mood'] = 1
-        self.creature_data[index]['started_colliding'] = 0.0
-        self.creature_data[index]['ended_interaction'] = 0.0
-        self.creature_data[index]['agility_base'] = np.random.random()
-        self.creature_data[index]['virility_base'] = np.random.random()
-        self.creature_data[index]['mojo'] = np.random.random()
-        self.creature_data[index]['aggressiveness_base'] = np.random.random()
-        self.creature_data[index]['power'] = np.random.random()
-        self.creature_data[index]['hunger'] = 0.5
-        self.creature_data[index]['type'] = 1
-        # self.creature_data[index]['color']
-        self.creature_data[index]['interacting_with'] = -1
-
-        position_vec = [position[0], position[1], 0.0, 0.5]  # Position, rotation, scale
-        animation_vec = [0.0, 1.0, 1.0, 1.0]  # Animation time offset, beat frequency, swirl radius, swirl frequency
-        for i in range(3):
-            texture_vec = [self.get_texture('jelly'), 0.0, 1.0, 1.0]  # Texture index, color rotation, saturation, alpha
-            self.creature_parts[max_parts*index+i, :] = position_vec + texture_vec + animation_vec
-
-    def add_feet(self, index, position):
-        print('Creating feet at index {}'.format(index))
-        # if self.creature_data[index, 0] == 1.0:
-        if self.creature_data[index]['alive'] == 1:
-            self.remove_creature(index)
-
-        cp = self.creature_physics[index]
-
-        cp['target'] = pm.Body(10.0, 10.0)
-        cp['target'].position = position
-        cp['target'].position += (0.0, 10.0)
-
-        cp['body'] = [pm.Body(10.0, 5.0) for x in range(max_parts)]
-        top, bottom = cp['body'][0:2]
-        top.position = position
-        bottom.position = position
-        for i in range(2, 5):
-            cp['body'][i].position = offscreen_position[:2]
-
-        head_offset = pm.Vec2d((0.0, 0.4))
-        cp['constraint'] = [pm.constraint.DampedSpring(top, cp['target'], head_offset, (0.0, 0.0), 0.0, 10.0, 15.0),
-                            pm.constraint.PivotJoint(top, bottom, (0.0, 0.0), (0.0, 0.0)),
-                            pm.constraint.GearJoint(top, bottom, 0.0, 1.0)]
-
-        shape = pm.Circle(top, self.creature_parts[index*max_parts, 3]) # use the scale of the first creature part
-        shape.collision_type = 1
-        cp['shape'] = shape
-        self.pm_space.add(cp['shape'])
-        self.pm_space.add(cp['body'])
-        self.pm_space.add(cp['constraint'])
-
-        cp['active'] = True
+        creature_function = {'jelly': self.add_jelly,
+                             'feet': self.add_feet,
+                             'simple': self.add_simple,
+                             'sperm': self.add_sperm}[type]
+        creature_function(index, position)
 
         self.creature_data[index]['alive'] = 1
         self.creature_data[index]['max_age'] = np.random.random(1) * 180 + 180
@@ -296,8 +235,48 @@ class Culture(object):
         self.creature_data[index]['aggressiveness_base'] = np.random.random()
         self.creature_data[index]['power'] = np.random.random()
         self.creature_data[index]['hunger'] = 0.5
-        self.creature_data[index]['type'] = 3
+        # self.creature_data[index]['color']
         self.creature_data[index]['interacting_with'] = -1
+
+        self.pm_space.add(cp['shape'])
+        self.pm_space.add(cp['body'])
+        self.pm_space.add(cp['constraint'])
+
+        cp['active'] = True
+
+    def add_jelly(self, index, position):
+        print('Creating jelly at index {}'.format(index))
+        self.creature_data[index]['type'] = 1  # JELLY
+
+        cp = self.creature_physics[index]
+        head, mid, tail = cp['body'][0:3]
+        head.position = position
+        mid.position = head.position + (0.0, -1.0)
+        tail.position = head.position + (0.0, -2.0)
+
+        cp['constraint'] += [pm.constraint.SlideJoint(head, mid, (0.0, -0.1), (0.0, 0.1), 0.1, 0.5),
+                             pm.constraint.RotaryLimitJoint(head, mid, -0.5, 0.5),
+                             pm.constraint.SlideJoint(mid, tail, (0.0, -0.1), (0.0, 0.1), 0.1, 0.5),
+                             pm.constraint.RotaryLimitJoint(mid, tail, -0.5, 0.5)]
+
+        position_vec = [position[0], position[1], 0.0, 0.5]  # Position, rotation, scale
+        animation_vec = [0.0, 1.0, 1.0, 1.0]  # Animation time offset, beat frequency, swirl radius, swirl frequency
+        for i in range(3):
+            texture_vec = [self.get_texture('jelly'), 0.0, 1.0, 1.0]  # Texture index, color rotation, saturation, alpha
+            self.creature_parts[max_parts*index+i, :] = position_vec + texture_vec + animation_vec
+
+    def add_feet(self, index, position):
+        print('Creating feet at index {}'.format(index))
+        self.creature_data[index]['type'] = 2
+
+        cp = self.creature_physics[index]
+
+        top, bottom = cp['body'][:2]
+        top.position = position
+        bottom.position = position
+
+        cp['constraint'] += [pm.constraint.PivotJoint(top, bottom, (0.0, 0.0), (0.0, 0.0)),
+                             pm.constraint.GearJoint(top, bottom, 0.0, 1.0)]
 
         position_vec = [position[0], position[1], 0.0, 0.5]  # Position, rotation, scale
         animation_vec = [0.0, 1.0, 1.0, 1.0]  # Animation time offset, beat frequency, swirl radius, swirl frequency
@@ -309,50 +288,12 @@ class Culture(object):
 
     def add_simple(self, index, position):
         print('Creating simple at {} (index {})'.format(position, index))
-
-        if self.creature_data[index]['alive'] == 1:
-            self.remove_creature(index)
+        self.creature_data[index]['type'] = 3
 
         cp = self.creature_physics[index]
 
-        cp['target'] = pm.Body(10.0, 10.0)
-        cp['target'].position = position
-        cp['target'].position += (0.0, 30.0)
-
-        cp['body'] = [pm.Body(10.0, 5.0) for x in range(max_parts)]
         head = cp['body'][0]
         head.position = position
-        for i in range(1, 5):
-            cp['body'][i].position = offscreen_position[:2]
-
-        head_offset = pm.Vec2d((0.0, 0.4))
-        cp['constraint'] = [pm.constraint.DampedSpring(head, cp['target'], head_offset, (0.0, 0.0), 0.0, 10.0, 15.0)]
-
-        shape = pm.Circle(head, self.creature_parts[index*max_parts, 3]) # use the scale of the first creature part
-        shape.collision_type = 1
-        cp['shape'] = shape
-
-        self.pm_space.add(cp['shape'])
-        self.pm_space.add(cp['body'])
-        self.pm_space.add(cp['constraint'])
-
-        cp['active'] = True
-
-        self.creature_data[index]['alive'] = 1
-        self.creature_data[index]['max_age'] = np.random.random(1) * 180 + 180
-        self.creature_data[index]['age'] = 0
-        self.creature_data[index]['size'] = 0.5
-        self.creature_data[index]['mood'] = 1
-        self.creature_data[index]['started_colliding'] = 0.0
-        self.creature_data[index]['ended_interaction'] = 0.0
-        self.creature_data[index]['agility_base'] = np.random.random()
-        self.creature_data[index]['virility_base'] = np.random.random()
-        self.creature_data[index]['mojo'] = np.random.random()
-        self.creature_data[index]['aggressiveness_base'] = np.random.random()
-        self.creature_data[index]['power'] = np.random.random()
-        self.creature_data[index]['hunger'] = 0.5
-        self.creature_data[index]['type'] = 2
-        self.creature_data[index]['interacting_with'] = -1
 
         position_vec = [position[0], position[1], 0.0, 0.5]  # Position, rotation, scale
         animation_vec = [0.0, 1.0, 1.0, 1.0]  # Animation time offset, beat frequency, swirl radius, swirl frequency
@@ -361,57 +302,19 @@ class Culture(object):
 
     def add_sperm(self, index, position):
         print('Creating sperm at index {}'.format(index))
-        # if self.creature_data[index, 0] == 1.0:
-        if self.creature_data[index]['alive'] == 1:
-            self.remove_creature(index)
+        self.creature_data[index]['type'] = 4
 
         cp = self.creature_physics[index]
 
-        cp['target'] = pm.Body(10.0, 10.0)
-        cp['target'].position = position
-        cp['target'].position += (0.0, 30.0)
-
-        cp['body'] = [pm.Body(10.0, 5.0) for x in range(max_parts)]
         for i in range(5):
             cp['body'][i].position = position
-            cp['body'][i].position += (0.0, -1.0*i)
+            cp['body'][i].position += (0.0, -0.5*i)
 
-        head_offset = pm.Vec2d((0.0, 0.4))
-        print(head_offset)
-        cp['constraint'] = [pm.constraint.DampedSpring(cp['body'][0], cp['target'], head_offset, (0.0, 0.0), 0.0, 10.0, 15.0)]
         for i in range(4):
             a = cp['body'][i]
             b = cp['body'][i+1]
             cp['constraint'].append(pm.constraint.SlideJoint(a, b, (0.0, -0.3), (0.0, 0.3), 0.1*(0.8**i), 0.2*(0.8**i)))
             cp['constraint'].append(pm.constraint.RotaryLimitJoint(a, b, -0.5, 0.5))
-
-        shape = pm.Circle(cp['body'][0], self.creature_parts[index*max_parts, 3]) # use the scale of the first creature part
-        shape.collision_type = 1
-        cp['shape'] = shape
-
-        self.pm_space.add(cp['shape'])
-        self.pm_space.add(cp['body'])
-        self.pm_space.add(cp['constraint'])
-
-        cp['active'] = True
-
-        # self.creature_data[index, :] = [1.0, np.random.random(1)*10+10, 0.0, 0.5]  # Alive, max_age, age, size
-        self.creature_data[index]['alive'] = 1
-        self.creature_data[index]['max_age'] = np.random.random(1) * 180 + 180
-        self.creature_data[index]['age'] = 0
-        self.creature_data[index]['size'] = 0.5
-        self.creature_data[index]['mood'] = 1
-        self.creature_data[index]['started_colliding'] = 0.0
-        self.creature_data[index]['ended_interaction'] = 0.0
-        self.creature_data[index]['agility_base'] = np.random.random()
-        self.creature_data[index]['virility_base'] = np.random.random()
-        self.creature_data[index]['mojo'] = np.random.random()
-        self.creature_data[index]['aggressiveness_base'] = np.random.random()
-        self.creature_data[index]['power'] = np.random.random()
-        self.creature_data[index]['hunger'] = 0.5
-        self.creature_data[index]['type'] = 4
-        # self.creature_data[index]['color']
-        self.creature_data[index]['interacting_with'] = -1
 
         position_vec = [position[0], position[1], 0.0, 0.5]  # Position, rotation, scale
         animation_vec = [0.0, 1.0, 1.0, 1.0]  # Animation time offset, beat frequency, swirl radius, swirl frequency
