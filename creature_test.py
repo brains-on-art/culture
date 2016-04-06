@@ -14,14 +14,14 @@ sys.path.append('./pymunk')
 import pymunk as pm
 
 zmq_port = '5556'
-max_creatures = 50
+max_creatures = 25
 max_parts = 5
 offscreen_position = (30.0, 30.0)
 
 max_food = 100
 max_animations = 100
 
-resting_period = 30
+resting_period = 10
 
 @numba.jit
 def _find_first(vec, item):
@@ -116,15 +116,15 @@ class Culture(object):
         for i in range(10):
             self.add_food(np.random.rand(2)*20.0 - 10.0)
 
-        for i in range(3):
-            self.add_animation('birth',
-                               position=np.random.rand(2) * 20.0 - 10.0,
-                               rotation=np.random.rand() * 2 * np.pi,
-                               num_loops=5)
-            self.add_animation('death',
-                               position=np.random.rand(2) * 20.0 - 10.0,
-                               rotation=np.random.rand() * 2 * np.pi,
-                               num_loops=20)
+        # for i in range(3):
+        #     self.add_animation('birth',
+        #                        position=np.random.rand(2) * 20.0 - 10.0,
+        #                        rotation=np.random.rand() * 2 * np.pi,
+        #                        num_loops=5)
+        #     self.add_animation('death',
+        #                        position=np.random.rand(2) * 20.0 - 10.0,
+        #                        rotation=np.random.rand() * 2 * np.pi,
+        #                        num_loops=20)
 
     def add_jelly(self, index, position):
         print('Creating jelly at index {}'.format(index))
@@ -186,7 +186,7 @@ class Culture(object):
         # Add animation to next slot
         index = self.next_animation
 
-        print('Adding {} animation at {} (index {})'.format(type, position, index))
+        # print('Adding {} animation at {} (index {})'.format(type, position, index))
         # Get animation specific parameters
         if type == 'birth':
             start_frame, end_frame = 0.0, 15.0 # FIXME: halutaanko kovakoodata nämä
@@ -254,7 +254,8 @@ class Culture(object):
         cp['constraint'] = None
 
         self.creature_data[index] = np.zeros(len(self.creature_data.dtype.names))
-        self.creature_parts[index:index+max_parts, :2] = offscreen_position
+        self.creature_parts[index*max_parts:(index*max_parts)+max_parts-1, :2] = offscreen_position
+        # self.creature_parts[index:index+max_parts, :2] = offscreen_position
 
     def update(self, dt):
         self.ct = time.perf_counter()
@@ -280,6 +281,7 @@ class Culture(object):
         virility = self.creature_data['virility_base'] + 1 - self.creature_data['hunger']
         mood = self.creature_data['mood']
         creature_type = self.creature_data['type']
+        started_colliding = self.creature_data['started_colliding']
         last_interacted = self.creature_data['ended_interaction']
 
         # Update appearance changes from aging and remove dead creatures
@@ -290,19 +292,42 @@ class Culture(object):
             self.remove_creature(ind)
 
         # Find colliding creatures and deal with them
-        collisions = self.get_collision_matrix()
+        # time1 = time.perf_counter()
+        collisions, distances, radii = self.get_collision_matrix()
+        # time2 = time.perf_counter()
+        # print((time2 - time1) * 1000)
+
+        # see which rows have collisions...
         ids_in_collision = np.nonzero([sum(i) for i in collisions])[0]
         if ids_in_collision.any():
-            for id in ids_in_collision:
-                # creatures can start an interaction if they are at mood 1
-                other = collisions[id].nonzero()[0][0]
-                if self.can_start_interaction([id, other]):
-                    mood[[id,other]] = 0
-                    print('{} were noticed to be colliding (mood=0) at ts {}'.format([id, other], time.perf_counter()))
-            #modify colliders' alpha to see them
-            self.creature_parts[ids_in_collision * max_parts, 7] = 0.2
+            # ...do stuff if there are some
+            for i in ids_in_collision:
+                if mood[i] != 1: # only go forward if i'm available
+                    continue
+                distances[i,i] = np.inf # make sure not to choose yourself
+                other = np.argmin(distances[i]) # and then choose the closest one
+                # NB DONT ASSERT IN PRODUCTION
+                # assert (np.argmin(distances[other]) == i) and (distances[i,other] < radii[i,other])
+                self.creature_parts[i*max_parts, 7] = 0.2
 
-        # Move creatures
+                if self.can_start_interaction([i,other]):
+                    print('{} found to be colliding with {}, with distance {} (radii sum {})'.format(i, other, distances[i,other], radii[i,other]))
+                    mood[[i,other]] = 0
+                    started_colliding[[i, other]] = self.ct
+
+            # if self.can_start_interaction([i, other]):
+            #     print('{} started an interaction'.format([i, other]) )
+            #     mood[[i,other]] = 0
+            #     # print('{} were noticed to be colliding (mood=0) at ts {}'.format([i, other], time.perf_counter()))
+            #     # print('handling collision between {}'.format([i, other]))
+            #     self.start_interaction([i, other])
+            # elif self.creature_data[i]['mood'] == -1:
+            #     self.process_interactions([i, other])
+            # else:
+            #         print('{} couldnt start with {}, and {} wasnt in mood -1'.format(i, other, i))
+            #modify colliders' alpha to see them
+
+        # Move creatures that are able to move (mood == 1)
         for i in range(max_creatures):
             cp = self.creature_physics[i]
             if not alive[i]:
@@ -310,32 +335,34 @@ class Culture(object):
                continue
 
             if mood[i] == 0:
-                # ...(WIP: for now, just mark the time and go to "stopped" state)...
-                self.creature_data[i]['started_colliding'] = time.perf_counter()
+                # just started colliding
+                print('{} started interaction'.format(i))
+                # so go to next state and fire animation
                 mood[i] = -1
-                print('{} marked as started colliding (mood=-1) at ts {}'.format(i, self.creature_data[i]['started_colliding']))
-                continue
+                self.add_animation('birth',
+                                   position=cp['body'][0].position,
+                                   rotation=np.random.rand() * 2 * np.pi,
+                                   num_loops=1)
             elif mood[i] == -1:
-                # ...but occupied creatures need to stop
-                cp['target'].position = cp['body'][0].position
-                for body in cp['body']:
-                    body.velocity = (0,0)
-                    body.reset_forces()
-                # in essence: stay still for 5s before revealing the result
-                if (time.perf_counter() - self.creature_data[i]['started_colliding']) > 5:
-                    # TODO: shoot in some direction
-                    # cp['target'].position += (0,-300)
-                    # map(lambda b: b.apply_impulse(0,-10000), cp['body'])
+                if (self.ct - started_colliding[i]) < 5:
+                    # not done with dancing
+                    map(lambda b: b.reset_forces(), cp['body'])
+                    for body in cp['body']:
+                        body.velocity = (0, 0)
+                else:
+                    #end interaction
+                    self.add_animation('death',
+                                       position=cp['body'][0].position,
+                                       rotation=np.random.rand() * 2 * np.pi,
+                                       num_loops=1)
                     mood[i] = 1
-                    self.creature_data[i]['ended_interaction'] = time.perf_counter()
-                    print('{} ended interaction (back to mood = 1) at ts {}'.format(i, self.creature_data[i]['ended_interaction']))
-                    continue
+                    last_interacted[i] = self.ct
 
             elif mood[i] == 1:
                 # Default mood, move creatures according to their type
                 if creature_type[i] == 1:
-                    if self.creature_physics[i]['body'][0].velocity.get_length() < 0.5:
-                        self.creature_physics[i]['target'].position += random_circle_point()
+                    if cp['body'][0].velocity.get_length() < 0.7:
+                        cp['target'].position += random_circle_point()
                 #    for j in range(3):
                 #        self.creature_parts[3*i+j, :2] = tuple(self.pm_body[i][j].position)
                 #        self.creature_parts[3*i+j, 2] = self.pm_body[i][j].angle
@@ -357,13 +384,19 @@ class Culture(object):
         alive = self.creature_data['alive']
         scale = self.creature_data['size']
 
-        dists = distm(self.creature_parts[::5,:2], self.creature_parts[::5,:2], 'euclidean')
+        dists = distm(self.creature_parts[::max_parts,:2], self.creature_parts[::max_parts,:2], 'euclidean')
         sizes = self.creature_data['size']
         radii = np.array([[sizes[i]+sizes[j] for j in np.arange(max_creatures)] for i in np.arange(max_creatures)])
-        collisions = dists < radii
-        for i in range(max_creatures):
-            collisions[i,i] = False
-        return collisions
+        # collisions = dists < radii
+        collisions = np.array([[dists[i,j] < radii[i,j] if (i!=j) and alive[[i,j]].all() else False for j in range(max_creatures)] for i in range(max_creatures)])
+        # collisions = np.zeros((max_creatures, max_creatures))
+        # for i in range(max_creatures):
+        #     for j in range(max_creatures):
+        #         collisions[i,j] = dists[i,j] < radii[i,j] if (i != j) and alive[[i,j]].all() else False
+        # for i in range(max_creatures):
+            # collisions[i,i] = False
+        # return collisions, dists, radii
+        return collisions, dists, radii
 
     @staticmethod
     def cleanup():
