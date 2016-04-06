@@ -1,7 +1,7 @@
 import sdl2
 from boa_gfx.gl_core import GLWindow
 from boa_gfx.core import EventManager
-from boa_gfx.gl_mesh import TriangleStrip, TexturedTriangleStrip
+from boa_gfx.gl_mesh import TexturedTriangleStrip
 from boa_gfx.gl_ui import ProgressBar
 from boa_gfx.transformer import Dynamo, linear, sinusoidal
 import boa_gfx.gl_shader
@@ -38,6 +38,10 @@ class Program(object):
         boa_gfx.gl_shader.shader_manager.shader_paths.append('./boa_gfx/shaders')
         boa_gfx.gl_shader.shader_manager.shader_paths.append('./shaders')
         boa_gfx.gl_texture.texture_manager.texture_paths.append('./textures')
+
+        background = TexturedTriangleStrip(texture_name='background.png')
+        background.position = (0.0, 0.0, -0.2)
+        background.scale = 13
 
         self.windows[0].camera.position = (0.0, 0.0, 13.0)
         self.windows[0].fullscreen = True
