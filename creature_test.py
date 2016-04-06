@@ -22,7 +22,7 @@ offscreen_position = (30.0, 30.0, 0.0)
 max_food = 100
 max_animations = 100
 
-resting_period = 10
+resting_period = 60
 
 @numba.jit
 def _find_first(vec, item):
@@ -144,7 +144,7 @@ class Culture(object):
             self.add_creature('feet', tuple(np.random.rand(2) * 20.0 - 10.0))
             self.add_creature('simple', tuple(np.random.rand(2) * 20.0 - 10.0))
             self.add_creature('sperm', tuple(np.random.rand(2) * 20.0 - 10.0))
-            
+
         for i in range(10):
             self.add_food(np.random.rand(2)*20.0 - 10.0)
 
@@ -450,7 +450,8 @@ class Culture(object):
         cur_age[:] += dt
         # ...and compute the other dynamic params
         hunger = self.creature_data['hunger']
-        hunger[:] + dt
+        hunger[:] += dt / 5
+        self.creature_data['hunger'] = np.clip(hunger, 0, 1)
         # agility = self.creature_data['agility_base'] * (1 - (self.creature_data['age'] / self.creature_data['max_age']))
         # succulence = 1 - hunger
         # aggr = self.creature_data['aggressiveness_base'] + self.creature_data['hunger']
@@ -584,6 +585,7 @@ class Culture(object):
                                position=(self.creature_physics[loser]['body'][0].position.x, self.creature_physics[loser]['body'][0].position.y),
                                rotation=np.random.rand() * 2 * np.pi,
                                num_loops=1)
+            self.creature_data['hunger'][winner] = 0
             self.remove_creature(loser)
 
         # 2. One wants to fight, other wants to run away
@@ -593,8 +595,8 @@ class Culture(object):
             escaper = b if aggressor == a else a
             escaped = self.escape_attempt(escaper, aggressor)
             if escaped:
-                mood[[a,b]] = 1
-                self.creature_data[[a,b]]['ended_interaction'] = self.ct
+                # mood[[a,b]] = 1
+                # self.creature_data[[a,b]]['ended_interaction'] = self.ct
                 # print('{} got away'.format(escaper))
                 print('{} wanted to fight {}, but it got away'.format(aggressor, escaper))
             else:
@@ -603,11 +605,13 @@ class Culture(object):
                                    rotation=np.random.rand() * 2 * np.pi,
                                    num_loops=1)
                 self.remove_creature(escaper)
+                self.creature_data['hunger'][aggressor] = 0
                 # print('{} was killed'.format(escaper))
                 print('{} wanted to fight {}, AND KILLED IT'.format(aggressor, escaper))
 
         # 4. Both want to reproduce
         elif checks[a]['virility'] and checks[b]['virility']:
+            # create new based on a, b
             print('HUBBA HUBBA, {} and {} reproduced'.format(a,b))
 
         # 5. One wants to reproduce, other wants to run
@@ -616,21 +620,28 @@ class Culture(object):
             aggressor = a if checks[a]['virility'] else b
             escaper = b if aggressor == a else a
             escaped = self.escape_attempt(escaper, aggressor)
-            if escape:
+            if escaped:
                 print('{} wanted to reproduce with {}, but they got away'.format(aggressor, escaper))
             else:
                 # create new based on a, b
                 print('{} wanted to reproduce with {}, but they got away'.format(aggressor, escaper))
-        mood[[a,b]] = 1 # go back to normal
+
+        # go back to normal
+        mood[[a,b]] = 1
+        self.creature_data[[a,b]]['ended_interaction'] = self.ct
         self.creature_data['interacting_with'][[a,b]] = -1
 
     # Roll a die and see if it's below creatures stat. If it is, success.
     def aggr_check(self, i):
         aggr = self.creature_data['aggressiveness_base'] + self.creature_data['hunger']
-        return np.random.random() < np.clip(aggr[i], 0.0, 0.9)
+        print('aggro checking {}, base aggr {:.3f}, current aggr {:.3f}'.format(i, self.creature_data['aggressiveness_base'][i], aggr[i]))
+        # return np.random.random() < np.clip(aggr[i], 0.0, 0.9)
+        return np.random.random()*2 < np.clip(aggr[i], 0.0, 1.8)
     def virility_check(self, i):
         virility = self.creature_data['virility_base'] + 1 - self.creature_data['hunger']
-        return np.random.random() < np.clip(virility[i], 0.0, 0.9)
+        print('virility checking {}, base virility {:.3f}, current virility {:.3f}'.format(i, self.creature_data['virility_base'][i], virility[i]))
+        # return np.random.random() < np.clip(virility[i], 0.0, 0.9)
+        return np.random.random()*2 < np.clip(virility[i], 0.0, 1.8)
     # Just compare the powers
     def power_check(self, a, b):
         power = self.creature_data['power']
