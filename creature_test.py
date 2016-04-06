@@ -143,19 +143,19 @@ class Culture(object):
             self.add_animation('death',
                                position=np.random.rand(2) * 20.0 - 10.0,
                                rotation=np.random.rand() * 2 * np.pi,
-                               num_loops=20)
+                               num_loops=5)
             self.add_animation('contact',
                                position=np.random.rand(2) * 20.0 - 10.0,
                                rotation=np.random.rand() * 2 * np.pi,
-                               num_loops=20)
+                               num_loops=5)
             self.add_animation('fight',
                                position=np.random.rand(2) * 20.0 - 10.0,
                                rotation=np.random.rand() * 2 * np.pi,
-                               num_loops=20)
+                               num_loops=5)
             self.add_animation('reproduction',
                                position=np.random.rand(2) * 20.0 - 10.0,
                                rotation=np.random.rand() * 2 * np.pi,
-                               num_loops=20)
+                               num_loops=5)
 
     def get_texture(self, group, variant=None, part=None):
         if group == 'jelly':
@@ -334,22 +334,25 @@ class Culture(object):
         index = self.next_animation
 
         print('Adding {} animation at {} (index {})'.format(type, position, index))
+
+        alpha_frame = omega_frame = 0.0
+
         # Get animation specific parameters
         if type == 'birth':
-            start_frame, end_frame = 0.0, 15.0 # FIXME: halutaanko kovakoodata nämä
+            start_frame, end_frame = 1.0, 16.0 # FIXME: halutaanko kovakoodata nämä
             loop_time = 1.0
         elif type == 'contact':
-            start_frame, end_frame = 16.0, 33.0
+            start_frame, end_frame = 17.0, 34.0
             loop_time = 2.0
         elif type == 'death':
             scale *= 1.5
-            start_frame, end_frame = 34.0, 55.0
+            start_frame, end_frame = 35.0, 56.0
             loop_time = 3.0
         elif type == 'fight':
-            start_frame, end_frame = 56.0, 73.0
+            start_frame, end_frame = 57.0, 74.0
             loop_time = 2.0
         elif type == 'reproduction':
-            start_frame, end_frame = 74.0, 91.0
+            start_frame, end_frame = 75.0, 92.0
             loop_time = 2.0
         else:
             return None
@@ -364,7 +367,7 @@ class Culture(object):
         # Construct attribute vectors (matches GLSL)
         position_vec = [position[0], position[1], rotation, scale]
         param1_vec = [start_frame, end_frame, start_time, loop_time]
-        param2_vec = [num_loops, start_frame, end_frame]
+        param2_vec = [num_loops, alpha_frame, omega_frame]
 
         # Add animation data to shared array
         self.animation_gfx[index, :11] = position_vec + param1_vec + param2_vec
