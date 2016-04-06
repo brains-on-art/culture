@@ -14,6 +14,8 @@ from scipy.spatial.distance import cdist as distm
 sys.path.append('./pymunk')
 import pymunk as pm
 
+from boa_gfx.time import TimeAware, TimeKeeper
+
 zmq_port = '5556'
 max_creatures = 25
 max_parts = 5
@@ -49,7 +51,7 @@ def create_new_sa_array(name, shape, dtype):
     return sa_array
 
 
-class Culture(object):
+class Culture(TimeAware):
     def __init__(self):
         # Create creature parts array to share with visualization
         self.creature_parts = create_new_sa_array('creature_parts', (max_creatures*max_parts, 12), np.float32)
@@ -238,6 +240,13 @@ class Culture(object):
         # self.creature_data[index]['color']
         self.creature_data[index]['interacting_with'] = -1
 
+        f = lambda: self.activate_creature_physics(index)
+
+        self.scheduler.enter(5, 0.0, f)
+
+    def activate_creature_physics(self, index):
+        cp = self.creature_physics[index]
+
         self.pm_space.add(cp['shape'])
         self.pm_space.add(cp['body'])
         self.pm_space.add(cp['constraint'])
@@ -251,17 +260,18 @@ class Culture(object):
         cp = self.creature_physics[index]
         head, mid, tail = cp['body'][0:3]
         head.position = position
-        mid.position = head.position + (0.0, -1.0)
-        tail.position = head.position + (0.0, -2.0)
+        mid.position = head.position + (0.0, -0.3)
+        tail.position = head.position + (0.0, -0.6)
 
         cp['constraint'] += [pm.constraint.SlideJoint(head, mid, (0.0, -0.1), (0.0, 0.1), 0.1, 0.5),
                              pm.constraint.RotaryLimitJoint(head, mid, -0.5, 0.5),
                              pm.constraint.SlideJoint(mid, tail, (0.0, -0.1), (0.0, 0.1), 0.1, 0.5),
                              pm.constraint.RotaryLimitJoint(mid, tail, -0.5, 0.5)]
 
-        position_vec = [position[0], position[1], 0.0, 0.5]  # Position, rotation, scale
+
         animation_vec = [0.0, 1.0, 1.0, 1.0]  # Animation time offset, beat frequency, swirl radius, swirl frequency
         for i in range(3):
+            position_vec = [position[0], position[1]-0.3*(i+1), 0.0, 0.5]  # Position, rotation, scale
             texture_vec = [self.get_texture('jelly'), 0.0, 1.0, 1.0]  # Texture index, color rotation, saturation, alpha
             self.creature_parts[max_parts*index+i, :] = position_vec + texture_vec + animation_vec
 
@@ -322,7 +332,7 @@ class Culture(object):
         texture_vec = [tex_head, 0.0, 1.0, 1.0]  # Texture index, color rotation, saturation, alpha
         self.creature_parts[max_parts * index, :] = position_vec + texture_vec + animation_vec
         for i in range(4):
-            position_vec = [position[0], position[1], 0.0, 0.25*(0.8**i)]
+            position_vec = [position[0], position[1]-0.5*(i+1), 0.0, 0.25*(0.8**i)]
             texture_vec = [tex_tail, 0.25, 1.0, 1.0]  # Texture index, color rotation, saturation, alpha
             self.creature_parts[max_parts * index + (i+1), :] = position_vec + texture_vec + animation_vec
 
@@ -430,6 +440,7 @@ class Culture(object):
         cp['shape'] = None
 
         self.creature_data[index] = np.zeros(len(self.creature_data.dtype.names))
+        self.creature_data[index]['max_age'] = 1.0
         self.creature_parts[index:index+max_parts, :3] = offscreen_position
 
     def update(self, dt):
@@ -528,12 +539,22 @@ class Culture(object):
         # Advance the physics simulation and sync physics with graphics
         self.pm_space.step(dt)
 
-        positions = [[(body.position.x, body.position.y, -body.angle) for body in creature['body']]
-                     if creature['active']
-                     else [offscreen_position for x in range(max_parts)]
-                     for creature in self.creature_physics]
-        positions = np.array(positions).reshape(max_creatures*max_parts, 3)
-        self.creature_parts[:, :3] = positions
+        #t1 = time.perf_counter()
+        mask = np.array([creature['active'] for creature in self.creature_physics]).repeat(max_parts)
+        positions = np.array([[(body.position.x, body.position.y, -body.angle) for body in creature['body']]
+                              for creature in self.creature_physics if creature['active']]).reshape(mask.sum(), 3)
+        self.creature_parts[mask, :3] = positions
+        #t2 = time.perf_counter()
+        #print(t2-t1)
+
+        #t1 = time.perf_counter()
+        #positions = [[(body.position.x, body.position.y, -body.angle) for body in creature['body']]
+        #             if creature['active']
+        #             else [offscreen_position for x in range(max_parts)]
+        #             for creature in self.creature_physics]
+        #positions = np.array(positions).reshape(max_creatures*max_parts, 3)
+        #self.creature_parts[:, :3] = positions
+        #print(t2-t1)
 
     def can_start_interaction(self, arr_like):
         mood = self.creature_data['mood']
@@ -677,11 +698,14 @@ class Culture(object):
 
 
 def main():
+    timekeeper = TimeKeeper()
     culture = Culture()
 
     gfx_p = subprocess.Popen(['python', 'main.py'])
 
     running = True
+
+
 
     def signal_handler(signal_number, frame):
         print('Received signal {} in frame {}'.format(signal_number, frame))
@@ -708,6 +732,7 @@ def main():
             print("I don't know what happened: ", sys.exc_info()[0])
             raise
 
+        timekeeper.update()
         culture.update(0.01)
         time.sleep(0.01)
         if gfx_p.poll() == 0:
