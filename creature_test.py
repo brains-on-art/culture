@@ -494,8 +494,6 @@ class Culture(TimeAware):
                     continue
                 distances[i,i] = np.inf # make sure not to choose yourself
                 other = np.argmin(distances[i]) # and then choose the closest one
-                # NB DONT ASSERT IN PRODUCTION
-                # assert (np.argmin(distances[other]) == i) and (distances[i,other] < radii[i,other])
                 self.creature_parts[i*max_parts, 7] = 0.2
 
                 if self.can_start_interaction([i,other]):
@@ -516,12 +514,6 @@ class Culture(TimeAware):
                 # just started colliding
                 self.start_interaction(i, interacting_with[i])
                 # so go to next state and fire animation
-                # mood[i] = -1
-                # anim = 'fight' if np.random.random() < np.clip(aggr[i], 0.0, 0.8) else 'contact'
-                # self.add_animation(anim,
-                #                    position=cp['body'][0].position,
-                #                    rotation=np.random.rand() * 2 * np.pi,
-                #                    num_loops=1)
 
             elif mood[i] == -1:
                 # already in an interaction
@@ -531,13 +523,6 @@ class Culture(TimeAware):
                     for body in cp['body']:
                         body.velocity = (0, 0)
                 else:
-                    #end interaction
-                    # self.add_animation('death',
-                    #                    position=cp['body'][0].position,
-                    #                    rotation=np.random.rand() * 2 * np.pi,
-                    #                    num_loops=1)
-                    # mood[i] = 1
-                    # last_interacted[i] = self.ct
                     self.end_interaction(i, interacting_with[i])
 
             elif mood[i] == 1:
@@ -624,28 +609,41 @@ class Culture(TimeAware):
 
         # 2. One wants to fight, other wants to run away
         elif checks[a]['aggr'] or checks[b]['aggr']:
-            aggr = self.creature_data['aggressiveness_base'] + self.creature_data['hunger']
+            # aggr = self.creature_data['aggressiveness_base'] + self.creature_data['hunger']
             aggressor = a if checks[a]['aggr'] else b
             escaper = b if aggressor == a else a
             escaped = self.escape_attempt(escaper, aggressor)
-            print('{} wants to fight {}'.format(aggressor, escaper))
             if escaped:
                 mood[[a,b]] = 1
                 self.creature_data[[a,b]]['ended_interaction'] = self.ct
-                print('{} got away'.format(escaper))
+                # print('{} got away'.format(escaper))
+                print('{} wanted to fight {}, but it got away'.format(aggressor, escaper))
             else:
                 self.add_animation('death',
                                    position=(self.creature_physics[escaper]['body'][0].position.x, self.creature_physics[escaper]['body'][0].position.y),
                                    rotation=np.random.rand() * 2 * np.pi,
                                    num_loops=1)
                 self.remove_creature(escaper)
-                print('{} was killed'.format(escaper))
+                # print('{} was killed'.format(escaper))
+                print('{} wanted to fight {}, AND KILLED IT'.format(aggressor, escaper))
 
         # 4. Both want to reproduce
         elif checks[a]['virility'] and checks[b]['virility']:
-            print('neither wanted to fight')
+            print('HUBBA HUBBA, {} and {} reproduced'.format(a,b))
 
+        # 5. One wants to reproduce, other wants to run
+        elif checks[a]['virility'] or checks[b]['virility']:
+            virility = self.creature_data['virility_base'] + 1 - self.creature_data['hunger']
+            aggressor = a if checks[a]['virility'] else b
+            escaper = b if aggressor == a else a
+            escaped = self.escape_attempt(escaper, aggressor)
+            if escape:
+                print('{} wanted to reproduce with {}, but they got away'.format(aggressor, escaper))
+            else:
+                # create new based on a, b
+                print('{} wanted to reproduce with {}, but they got away'.format(aggressor, escaper))
         mood[[a,b]] = 1 # go back to normal
+        self.creature_data['interacting_with'][[a,b]] = -1
 
     # Roll a die and see if it's below creatures stat. If it is, success.
     def aggr_check(self, i):
