@@ -253,6 +253,16 @@ class Culture(TimeAware):
 
         cp['active'] = True
 
+    def deactive_creature_physics(self, index):
+        cp = self.creature_physics[index]
+
+        if cp['active']:
+            self.pm_space.remove(cp['shape'])
+            self.pm_space.remove(cp['body'])
+            self.pm_space.remove(cp['constraint'])
+
+            cp['active'] = False
+
     def add_jelly(self, index, position):
         print('Creating jelly at index {}'.format(index))
         self.creature_data[index]['type'] = 1  # JELLY
@@ -407,7 +417,7 @@ class Culture(TimeAware):
         # Add food to next slot
         index = self.next_food
 
-        print('Addind food at {} (index {})'.format(position, index))
+        print('Adding food at {} (index {})'.format(position, index))
 
         # Randomize rotation by default
         if rotation is None:
@@ -428,12 +438,9 @@ class Culture(TimeAware):
 
     def remove_creature(self, index):
         print('Removing creature at index {}'.format(index))
-        cp = self.creature_physics[index]
-        self.pm_space.remove(cp['constraint'])
-        self.pm_space.remove(cp['shape'])
-        self.pm_space.remove(cp['body'])
+        self.deactive_creature_physics(index)
 
-        cp['active'] = False
+        cp = self.creature_physics[index]
         cp['target'] = None
         cp['body'] = None
         cp['constraint'] = None
