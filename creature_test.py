@@ -608,6 +608,7 @@ class Culture(TimeAware):
                                num_loops=1)
             self.creature_data['hunger'][winner] = 0
             self.remove_creature(loser)
+            mood[winner] = 1
 
         # 2. One wants to fight, other wants to run away
         elif checks[a]['aggr'] or checks[b]['aggr']:
@@ -619,6 +620,7 @@ class Culture(TimeAware):
                 # mood[[a,b]] = 1
                 # self.creature_data[[a,b]]['ended_interaction'] = self.ct
                 # print('{} got away'.format(escaper))
+                mood[[a,b]] = 1
                 print('{} wanted to fight {}, but it got away'.format(aggressor, escaper))
             else:
                 self.add_animation('death',
@@ -627,12 +629,14 @@ class Culture(TimeAware):
                                    num_loops=1)
                 self.remove_creature(escaper)
                 self.creature_data['hunger'][aggressor] = 0
+                mood[agressor] = 1
                 # print('{} was killed'.format(escaper))
                 print('{} wanted to fight {}, AND KILLED IT'.format(aggressor, escaper))
 
         # 4. Both want to reproduce
         elif checks[a]['virility'] and checks[b]['virility']:
             # create new based on a, b
+            mood[[a,b]] = 1
             print('HUBBA HUBBA, {} and {} reproduced'.format(a,b))
 
         # 5. One wants to reproduce, other wants to run
@@ -642,17 +646,19 @@ class Culture(TimeAware):
             escaper = b if aggressor == a else a
             escaped = self.escape_attempt(escaper, aggressor)
             if escaped:
+                mood[[a,b]] = 1
                 print('{} wanted to reproduce with {}, but they got away'.format(aggressor, escaper))
             else:
                 # create new based on a, b
+                mood[[a,b]] = 1
                 print('{} wanted to reproduce with {}, but they got away'.format(aggressor, escaper))
 
         # go back to normal
-        mood[[a,b]] = 1
+        # mood[[a,b]] = 1
         self.creature_data[[a,b]]['ended_interaction'] = self.ct
         self.creature_data['interacting_with'][[a,b]] = -1
 
-    # Roll a die and see if it's below creatures stat. If it is, success.
+    # Roll a die -> if it's below creatures stat, success
     def aggr_check(self, i):
         aggr = self.creature_data['aggressiveness_base'] + self.creature_data['hunger']
         print('aggro checking {}, base aggr {:.3f}, current aggr {:.3f}'.format(i, self.creature_data['aggressiveness_base'][i], aggr[i]))
