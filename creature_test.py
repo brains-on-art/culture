@@ -240,9 +240,10 @@ class Culture(TimeAware):
         # self.creature_data[index]['color']
         self.creature_data[index]['interacting_with'] = -1
 
-        f = lambda: self.activate_creature_physics(index)
+        self.activate_creature_physics(index)
+        # f = lambda: self.activate_creature_physics(index)
 
-        self.scheduler.enter(5, 0.0, f)
+        # self.scheduler.enter(5, 0.0, f)
 
     def activate_creature_physics(self, index):
         cp = self.creature_physics[index]
@@ -253,7 +254,7 @@ class Culture(TimeAware):
 
         cp['active'] = True
 
-    def deactive_creature_physics(self, index):
+    def deactivate_creature_physics(self, index):
         cp = self.creature_physics[index]
 
         if cp['active']:
@@ -438,7 +439,7 @@ class Culture(TimeAware):
 
     def remove_creature(self, index):
         print('Removing creature at index {}'.format(index))
-        self.deactive_creature_physics(index)
+        self.deactivate_creature_physics(index)
 
         cp = self.creature_physics[index]
         cp['target'] = None
@@ -527,9 +528,10 @@ class Culture(TimeAware):
                 # already in an interaction
                 if (self.ct - started_colliding[i]) < 5:
                     # not yet done with dancing
-                    map(lambda b: b.reset_forces(), cp['body'])
-                    for body in cp['body']:
-                        body.velocity = (0, 0)
+                    # map(lambda b: b.reset_forces(), cp['body'])
+                    # for body in cp['body']:
+                        # body.velocity = (0, 0)
+                    self.deactivate_creature_physics(i)
                 else:
                     self.end_interaction(i, interacting_with[i])
 
@@ -569,6 +571,9 @@ class Culture(TimeAware):
         return (mood[arr_like] == 1).all() and ((self.ct - last_interacted[arr_like]) > resting_period).all()
 
     def start_interaction(self, a, b):
+        alive = self.creature_data['alive']
+        if not (alive[[a,b]] == 1).all():
+            raise NameError('{} and {} wanted to start interacting but one was dead: {}'.format(a,b,alive[[a,b]]))
         mood = self.creature_data['mood']
         checks = {a: {'aggr': self.aggr_check(a),
                     'virility': self.virility_check(a)},
@@ -590,6 +595,7 @@ class Culture(TimeAware):
                                    rotation=np.random.rand() * 2 * np.pi,
                                    num_loops=1,
                                    relative_start_time=0.08)
+            if not (checks[i]['aggr'] or checks[i]['virility']):
                 self.add_animation('contact',
                                    position=(self.creature_physics[i]['body'][0].position.x, self.creature_physics[i]['body'][0].position.y),
                                    rotation=np.random.rand() * 2 * np.pi,
@@ -597,6 +603,9 @@ class Culture(TimeAware):
             mood[i] = -1
 
     def end_interaction(self, a, b):
+        alive = self.creature_data['alive']
+        if not (alive[[a,b]] == 1).all():
+            raise NameError('{} and {} wanted to start interacting but one was dead: {}'.format(a,b,alive[[a,b]]))
         mood = self.creature_data['mood']
         checks = {a: {'aggr': self.aggr_check(a),
                     'virility': self.virility_check(a)},
@@ -609,12 +618,23 @@ class Culture(TimeAware):
             winner = self.power_check(a, b)
             loser = a if winner == b else b
             print('both wanted a fight: {} killed {}'.format(winner, loser))
-            self.add_animation('death',
-                               position=(self.creature_physics[loser]['body'][0].position.x, self.creature_physics[loser]['body'][0].position.y),
+            # self.add_animation('death',
+            #                    position=(self.creature_physics[loser]['body'][0].position.x, self.creature_physics[loser]['body'][0].position.y),
+            #                    rotation=np.random.rand() * 2 * np.pi,
+            #                    num_loops=1)
+
+            x = self.creature_physics[loser]['body'][0].position.x
+            y = self.creature_physics[loser]['body'][0].position.y
+            def play_animation(x,y):
+                self.add_animation('death',
+                               position=(x, y),
                                rotation=np.random.rand() * 2 * np.pi,
                                num_loops=1)
+            self.scheduler.enter(1, 0.0, play_animation, (x,y))
+
             self.creature_data['hunger'][winner] = 0
             self.remove_creature(loser)
+            self.activate_creature_physics(winner)
             mood[winner] = 1
 
         # 2. One wants to fight, other wants to run away
@@ -627,22 +647,34 @@ class Culture(TimeAware):
                 # mood[[a,b]] = 1
                 # self.creature_data[[a,b]]['ended_interaction'] = self.ct
                 # print('{} got away'.format(escaper))
+                map(self.activate_creature_physics, [a,b])
                 mood[[a,b]] = 1
                 print('{} wanted to fight {}, but it got away'.format(aggressor, escaper))
             else:
-                self.add_animation('death',
-                                   position=(self.creature_physics[escaper]['body'][0].position.x, self.creature_physics[escaper]['body'][0].position.y),
+                # self.add_animation('death',
+                #                    position=(self.creature_physics[escaper]['body'][0].position.x, self.creature_physics[escaper]['body'][0].position.y),
+                #                    rotation=np.random.rand() * 2 * np.pi,
+                #                    num_loops=1)
+                x = self.creature_physics[escaper]['body'][0].position.x
+                y = self.creature_physics[escaper]['body'][0].position.y
+                def play_animation(x,y):
+                    self.add_animation('death',
+                                   position=(x, y),
                                    rotation=np.random.rand() * 2 * np.pi,
                                    num_loops=1)
+                self.scheduler.enter(1, 0.0, play_animation, (x,y))
+
                 self.remove_creature(escaper)
                 self.creature_data['hunger'][aggressor] = 0
-                mood[agressor] = 1
+                self.activate_creature_physics(aggressor)
+                mood[aggressor] = 1
                 # print('{} was killed'.format(escaper))
                 print('{} wanted to fight {}, AND KILLED IT'.format(aggressor, escaper))
 
         # 4. Both want to reproduce
         elif checks[a]['virility'] and checks[b]['virility']:
             # create new based on a, b
+            map(self.activate_creature_physics, [a,b])
             mood[[a,b]] = 1
             print('HUBBA HUBBA, {} and {} reproduced'.format(a,b))
 
@@ -653,16 +685,19 @@ class Culture(TimeAware):
             escaper = b if aggressor == a else a
             escaped = self.escape_attempt(escaper, aggressor)
             if escaped:
+                map(self.activate_creature_physics, [a,b])
                 mood[[a,b]] = 1
                 print('{} wanted to reproduce with {}, but they got away'.format(aggressor, escaper))
             else:
                 # create new based on a, b
+                map(self.activate_creature_physics, [a,b])
                 mood[[a,b]] = 1
                 print('{} wanted to reproduce with {}, but they got away'.format(aggressor, escaper))
 
         # go back to normal
         # mood[[a,b]] = 1
-        self.creature_data[[a,b]]['ended_interaction'] = self.ct
+        print('interactions ended for {} and {}'.format(a,b))
+        self.creature_data['ended_interaction'][[a,b]] = self.ct
         self.creature_data['interacting_with'][[a,b]] = -1
 
     # Roll a die -> if it's below creatures stat, success
