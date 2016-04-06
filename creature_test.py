@@ -385,6 +385,11 @@ class Culture(object):
             cp['constraint'].append(pm.constraint.SlideJoint(a, b, (0.0, -0.3), (0.0, 0.3), 0.1*(0.8**i), 0.2*(0.8**i)))
             cp['constraint'].append(pm.constraint.RotaryLimitJoint(a, b, -0.5, 0.5))
 
+        shape = pm.Circle(cp['body'][0], self.creature_parts[index*max_parts, 3]) # use the scale of the first creature part
+        shape.collision_type = 1
+        cp['shape'] = shape
+
+        self.pm_space.add(cp['shape'])
         self.pm_space.add(cp['body'])
         self.pm_space.add(cp['constraint'])
 
@@ -513,7 +518,7 @@ class Culture(object):
         cp = self.creature_physics[index]
         self.pm_space.remove(cp['constraint'])
         self.pm_space.remove(cp['shape'])
-        # self.pm_space.remove(cp['body'])
+        self.pm_space.remove(cp['body'])
 
         cp['active'] = False
         cp['target'] = None
@@ -541,11 +546,12 @@ class Culture(object):
         cur_age = self.creature_data['age']
         cur_age[:] += dt
         # ...and compute the other dynamic params
-        hunger = self.creature_data['hunger'] + dt
-        agility = self.creature_data['agility_base'] * (1 - (self.creature_data['age'] / self.creature_data['max_age']))
-        succulence = 1 - hunger
-        aggr = self.creature_data['aggressiveness_base'] + self.creature_data['hunger']
-        virility = self.creature_data['virility_base'] + 1 - self.creature_data['hunger']
+        hunger = self.creature_data['hunger']
+        hunger[:] + dt
+        # agility = self.creature_data['agility_base'] * (1 - (self.creature_data['age'] / self.creature_data['max_age']))
+        # succulence = 1 - hunger
+        # aggr = self.creature_data['aggressiveness_base'] + self.creature_data['hunger']
+        # virility = self.creature_data['virility_base'] + 1 - self.creature_data['hunger']
         mood = self.creature_data['mood']
         creature_type = self.creature_data['type']
         started_colliding = self.creature_data['started_colliding']
@@ -579,7 +585,7 @@ class Culture(object):
                 self.creature_parts[i*max_parts, 7] = 0.2
 
                 if self.can_start_interaction([i,other]):
-                    print('{} found to be colliding with {}, with distance {} (radii sum {})'.format(i, other, distances[i,other], radii[i,other]))
+                    # print('{} found to be colliding with {}, with distance {} (radii sum {})'.format(i, other, distances[i,other], radii[i,other]))
                     mood[[i,other]] = 0
                     interacting_with[i] = other
                     interacting_with[other] = i
@@ -594,14 +600,14 @@ class Culture(object):
 
             if mood[i] == 0:
                 # just started colliding
-                print('{} started interaction'.format(i))
+                self.start_interaction(i, interacting_with[i])
                 # so go to next state and fire animation
-                mood[i] = -1
-                anim = 'fight' if np.random.random() < np.clip(aggr[i], 0.0, 0.8) else 'contact'
-                self.add_animation(anim,
-                                   position=cp['body'][0].position,
-                                   rotation=np.random.rand() * 2 * np.pi,
-                                   num_loops=1)
+                # mood[i] = -1
+                # anim = 'fight' if np.random.random() < np.clip(aggr[i], 0.0, 0.8) else 'contact'
+                # self.add_animation(anim,
+                #                    position=cp['body'][0].position,
+                #                    rotation=np.random.rand() * 2 * np.pi,
+                #                    num_loops=1)
 
             elif mood[i] == -1:
                 # already in an interaction
@@ -612,12 +618,13 @@ class Culture(object):
                         body.velocity = (0, 0)
                 else:
                     #end interaction
-                    self.add_animation('death',
-                                       position=cp['body'][0].position,
-                                       rotation=np.random.rand() * 2 * np.pi,
-                                       num_loops=1)
+                    # self.add_animation('death',
+                    #                    position=cp['body'][0].position,
+                    #                    rotation=np.random.rand() * 2 * np.pi,
+                    #                    num_loops=1)
                     mood[i] = 1
                     last_interacted[i] = self.ct
+                    # self.end_interaction(i, interacting_with[i])
 
             elif mood[i] == 1:
                 # Default mood, move creatures according to their type
@@ -643,6 +650,95 @@ class Culture(object):
         mood = self.creature_data['mood']
         last_interacted = self.creature_data['ended_interaction']
         return (mood[arr_like] == 1).all() and ((self.ct - last_interacted[arr_like]) > resting_period).all()
+
+    def start_interaction(self, a, b):
+        mood = self.creature_data['mood']
+        checks = {a: {'aggr': self.aggr_check(a),
+                    'virility': self.virility_check(a)},
+                    b: {'aggr': self.aggr_check(b),
+                    'virility': self.virility_check(b)}}
+        # set animations immediately depending on aggression levels
+        for i in [a,b]:
+            anim = 'contact'
+            if checks[i]['aggr']:
+                # anim = 'fight'
+                self.add_animation('fight',
+                                   position=(self.creature_physics[i]['body'][0].position.x, self.creature_physics[i]['body'][0].position.y),
+                                   rotation=np.random.rand() * 2 * np.pi,
+                                   num_loops=1,
+                                   relative_start_time=0.1)
+            if checks[i]['virility']:
+                # anim = 'reproduction'
+                self.add_animation('reproduction',
+                                   position=(self.creature_physics[i]['body'][0].position.x, self.creature_physics[i]['body'][0].position.y),
+                                   rotation=np.random.rand() * 2 * np.pi,
+                                   num_loops=1,
+                                   relative_start_time=0.08)
+                self.add_animation('contact',
+                                   position=(self.creature_physics[i]['body'][0].position.x, self.creature_physics[i]['body'][0].position.y),
+                                   rotation=np.random.rand() * 2 * np.pi,
+                                   num_loops=1)
+            mood[i] = -1
+
+    # def end_interaction(self, a, b):
+        # mood = self.creature_data['mood']
+        # checks = {a: {'aggr': self.aggr_check(a),
+        #             'virility': self.virility_check(a)},
+        #             b: {'aggr': self.aggr_check(b),
+        #             'virility': self.virility_check(b)}}
+
+        # CASES:
+        # 1. Both want a fight
+        if checks[a]['aggr'] and checks[b]['aggr']:
+            winner = self.power_check(a, b)
+            loser = a if winner == b else b
+            print('both wanted a fight: {} killed {}'.format(winner, loser))
+            self.add_animation('death',
+                               position=(self.creature_physics[loser]['body'][0].position.x, self.creature_physics[loser]['body'][0].position.y),
+                               rotation=np.random.rand() * 2 * np.pi,
+                               num_loops=1,
+                               relative_start_time=0.08)
+            self.remove_creature(loser)
+
+        # 2. One wants to fight, other wants to run away
+        elif checks[a]['aggr'] or checks[b]['aggr']:
+            aggr = self.creature_data['aggressiveness_base'] + self.creature_data['hunger']
+            aggressor = a if checks[a]['aggr'] else b
+            escaper = b if aggressor == a else a
+            escaped = self.escape_attempt(escaper, aggressor)
+            print('{} wants to fight {}'.format(aggressor, escaper))
+            if escaped:
+                mood[[a,b]] = 1
+                self.creature_data[[a,b]]['ended_interaction'] = self.ct
+                print('{} got away'.format(escaper))
+            else:
+                self.add_animation('death',
+                                   position=self.creature_physics[escaper]['body'][0].position,
+                                   rotation=np.random.rand() * 2 * np.pi,
+                                   num_loops=1)
+                self.remove_creature(escaper)
+                print('{} was killed'.format(escaper))
+
+        # 4. Both want to reproduce
+        elif checks[a]['virility'] and checks[b]['virility']:
+            print('neither wanted to fight')
+
+    # Roll a die and see if it's below creatures stat. If it is, success.
+    def aggr_check(self, i):
+        aggr = self.creature_data['aggressiveness_base'] + self.creature_data['hunger']
+        return np.random.random() < np.clip(aggr[i], 0.0, 0.9)
+    def virility_check(self, i):
+        virility = self.creature_data['virility_base'] + 1 - self.creature_data['hunger']
+        return np.random.random() < np.clip(virility[i], 0.0, 0.9)
+    # Just compare the powers
+    def power_check(self, a, b):
+        power = self.creature_data['power']
+        return a if power[a] > power[b] else b
+
+    # A fight will happen if the aggressor is faster
+    def escape_attempt(self, escaper, aggressor):
+        agility = self.creature_data['agility_base'] * (1 - (self.creature_data['age'] / self.creature_data['max_age']))
+        return agility[escaper] > agility[aggressor]
 
     def get_collision_matrix(self):
         alive = self.creature_data['alive']
