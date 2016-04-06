@@ -241,7 +241,6 @@ class Culture(TimeAware):
         # self.creature_data[index]['color']
         self.creature_data[index]['interacting_with'] = -1
 
-        self.activate_creature_physics(index)
         f = lambda: self.activate_creature_physics(index)
 
         self.scheduler.enter(4.0, 0.0, f)
