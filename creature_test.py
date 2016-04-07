@@ -142,14 +142,15 @@ class Culture(TimeAware):
         # self.dt = p0.0
 
     def demo_init(self):
-        for i in range(5):
-            self.add_creature('jelly', tuple(np.random.rand(2)*20.0 - 10.0))
-            self.add_creature('feet', tuple(np.random.rand(2) * 20.0 - 10.0))
-            self.add_creature('simple', tuple(np.random.rand(2) * 20.0 - 10.0))
-            self.add_creature('sperm', tuple(np.random.rand(2) * 20.0 - 10.0))
+        # for i in range(5):
+        #     self.add_creature('jelly', tuple(np.random.rand(2)*20.0 - 10.0))
+        #     self.add_creature('feet', tuple(np.random.rand(2) * 20.0 - 10.0))
+        #     self.add_creature('simple', tuple(np.random.rand(2) * 20.0 - 10.0))
+        #     self.add_creature('sperm', tuple(np.random.rand(2) * 20.0 - 10.0))
+        self.add_creature('sperm', tuple(np.random.rand(2) * 20.0 - 10.0))
 
-        for i in range(10):
-            self.add_food(np.random.rand(2)*20.0 - 10.0)
+        # for i in range(10):
+        #     self.add_food(np.random.rand(2)*20.0 - 10.0)
 
         # for i in range(3):
         #     self.add_animation('birth',
@@ -371,7 +372,7 @@ class Culture(TimeAware):
                                       [[0.0, 0.0, 0.0, 0.0, 0.0], [0.5, 0.25, 0.25*0.8, 0.25*0.8**2, 0.25*0.8**2]])
 
     def add_animation(self, type, position, rotation=None, scale=1.0, relative_start_time=0.0, num_loops=1):
-        print('Adding animation {} at position {}'.format(type, position))
+        #print('Adding animation {} at position {}'.format(type, position))
         # Add animation to next slot
         index = self.next_animation
 
@@ -605,13 +606,23 @@ class Culture(TimeAware):
 
     def start_interaction(self, a, b):
         alive = self.creature_data['alive']
-        if not (alive[[a,b]] == 1).all():
-            raise NameError('{} and {} wanted to start interacting but one was dead: {}'.format(a,b,alive[[a,b]]))
         mood = self.creature_data['mood']
         checks = {a: {'aggr': self.aggr_check(a),
                     'virility': self.virility_check(a)},
                     b: {'aggr': self.aggr_check(b),
                     'virility': self.virility_check(b)}}
+        
+        if not (alive[[a,b]] == 1).all():
+            #raise NameError('{} and {} wanted to start interacting but one was dead: {}'.format(a,b,alive[[a,b]]))
+            if (not alive[b]) or (b == -1):
+                mood[a] = 1
+                self.creature_data['ended_interaction'][a] = self.ct
+                return
+            if (not alive[a]) or (a == -1):
+                mood[b] = 1
+                self.creature_data['ended_interaction'][b] = self.ct
+                return
+
         # set animations immediately depending on aggression levels
         for i in [a,b]:
             anim = 'contact'
@@ -637,13 +648,22 @@ class Culture(TimeAware):
 
     def end_interaction(self, a, b):
         alive = self.creature_data['alive']
-        if not (alive[[a,b]] == 1).all():
-            raise NameError('{} and {} wanted to start interacting but one was dead: {}'.format(a,b,alive[[a,b]]))
         mood = self.creature_data['mood']
         checks = {a: {'aggr': self.aggr_check(a),
                     'virility': self.virility_check(a)},
                     b: {'aggr': self.aggr_check(b),
                     'virility': self.virility_check(b)}}
+
+        if not (alive[[a,b]] == 1).all():
+            #raise NameError('{} and {} wanted to start interacting but one was dead: {}'.format(a,b,alive[[a,b]]))
+            if (not alive[b]) or (b == -1):
+                mood[a] = 1
+                self.creature_data['ended_interaction'][a] = self.ct
+                return
+            if (not alive[a]) or (a == -1):
+                mood[b] = 1
+                self.creature_data['ended_interaction'][b] = self.ct
+                return
 
         # CASES:
         # 1. Both want a fight
@@ -736,12 +756,12 @@ class Culture(TimeAware):
     # Roll a die -> if it's below creatures stat, success
     def aggr_check(self, i):
         aggr = self.creature_data['aggressiveness_base'] + self.creature_data['hunger']
-        print('aggro checking {}, base aggr {:.3f}, current aggr {:.3f}'.format(i, self.creature_data['aggressiveness_base'][i], aggr[i]))
+        #print('aggro checking {}, base aggr {:.3f}, current aggr {:.3f}'.format(i, self.creature_data['aggressiveness_base'][i], aggr[i]))
         # return np.random.random() < np.clip(aggr[i], 0.0, 0.9)
         return np.random.random()*2 < np.clip(aggr[i], 0.0, 1.8)
     def virility_check(self, i):
         virility = self.creature_data['virility_base'] + 1 - self.creature_data['hunger']
-        print('virility checking {}, base virility {:.3f}, current virility {:.3f}'.format(i, self.creature_data['virility_base'][i], virility[i]))
+        #print('virility checking {}, base virility {:.3f}, current virility {:.3f}'.format(i, self.creature_data['virility_base'][i], virility[i]))
         # return np.random.random() < np.clip(virility[i], 0.0, 0.9)
         return np.random.random()*2 < np.clip(virility[i], 0.0, 1.8)
     # Just compare the powers
@@ -805,13 +825,14 @@ def main():
             message = socket.recv_json(zmq.NOBLOCK)
             print(message)
             creature_type = np.random.choice(['feet', 'simple', 'jelly', 'sperm'])
-            if message['slave_id'] == 1:
+            # box_id = message['slave_id']
+            box_id = np.random.choice([1,2,3])
+            if box_id == 1:
                 position = (-6,-6)
-            elif message['slave_id'] == 2:
+            elif box_id == 2:
                 position = (0,8)
-            elif message['slave_id'] == 3:
-                position = (6,6)
-            # position = tuple(np.random.rand(2)*20.0 - 10.0)
+            elif box_id == 3:
+                position = (6,-6)
             culture.add_creature(creature_type, position)
             socket.send_string('OK', zmq.NOBLOCK)
         except zmq.error.Again:
