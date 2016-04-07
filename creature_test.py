@@ -777,10 +777,17 @@ def main():
 
     while running:
         try:
-            message = socket.recv_string(zmq.NOBLOCK)
-            index = np.random.randint(max_creatures)
-            position = tuple(np.random.rand(2)*20.0 - 10.0)
-            culture.add_jelly(index, position)
+            message = socket.recv_json(zmq.NOBLOCK)
+            print(message)
+            creature_type = np.random.choice(['feet', 'simple', 'jelly', 'sperm'])
+            if message['slave_id'] == 1:
+                position = (-6,-6)
+            elif message['slave_id'] == 2:
+                position = (0,8)
+            elif message['slave_id'] == 3:
+                position = (6,6)
+            # position = tuple(np.random.rand(2)*20.0 - 10.0)
+            culture.add_creature(creature_type, position)
             socket.send_string('OK', zmq.NOBLOCK)
         except zmq.error.Again:
             pass # no messages from sensor stations
