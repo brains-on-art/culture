@@ -14,7 +14,7 @@ from scipy.spatial.distance import cdist as distm
 sys.path.append('./pymunk')
 import pymunk as pm
 
-from boa_gfx.time import TimeAware, TimeKeeper
+from boa_gfx.time import TimeAware, TimeKeeper, Interpolator
 
 zmq_port = '5556'
 max_creatures = 25
@@ -245,7 +245,7 @@ class Culture(TimeAware):
 
         self.scheduler.enter(4.0, 0.0, f)
 
-        self.add_animation('birth', position, relative_start_time=3.0)
+        self.add_animation('birth', position, scale=1.5, relative_start_time=3.0)
 
     def activate_creature_physics(self, index):
         cp = self.creature_physics[index]
@@ -288,6 +288,11 @@ class Culture(TimeAware):
             texture_vec = [self.get_texture('jelly'), 0.0, 1.0, 1.0]  # Texture index, color rotation, saturation, alpha
             self.creature_parts[max_parts*index+i, :] = position_vec + texture_vec + animation_vec
 
+        Interpolator.add_interpolator(self.creature_parts,
+                                      np.s_[max_parts*index:max_parts*index+3, 3],
+                                      [0.0, 1.0],
+                                      [[0.0, 0.0, 0.0], [0.5, 0.5, 0.5]])
+
     def add_feet(self, index, position):
         print('Creating feet at index {}'.format(index))
         self.creature_data[index]['type'] = 2
@@ -309,6 +314,12 @@ class Culture(TimeAware):
         texture_vec = [tex[0], 0.25, 1.0, 0.01]
         self.creature_parts[max_parts * index + 1, :] = position_vec + texture_vec + animation_vec
 
+        Interpolator.add_interpolator(self.creature_parts,
+                                      np.s_[max_parts * index:max_parts * index + 2, 3],
+                                      [0.0, 1.0],
+                                      [[0.0, 0.0], [0.5, 0.5]])
+
+
     def add_simple(self, index, position):
         print('Creating simple at {} (index {})'.format(position, index))
         self.creature_data[index]['type'] = 3
@@ -322,6 +333,11 @@ class Culture(TimeAware):
         animation_vec = [0.0, 1.0, 1.0, 1.0]  # Animation time offset, beat frequency, swirl radius, swirl frequency
         texture_vec = [self.get_texture('simple'), 0.0, 1.0, 1.0]
         self.creature_parts[max_parts*index, :] = position_vec + texture_vec + animation_vec
+
+        Interpolator.add_interpolator(self.creature_parts,
+                                      np.s_[max_parts * index, 3],
+                                      [0.0, 1.0],
+                                      [[0.0], [0.5]])
 
     def add_sperm(self, index, position):
         print('Creating sperm at index {}'.format(index))
@@ -345,9 +361,14 @@ class Culture(TimeAware):
         texture_vec = [tex_head, 0.0, 1.0, 1.0]  # Texture index, color rotation, saturation, alpha
         self.creature_parts[max_parts * index, :] = position_vec + texture_vec + animation_vec
         for i in range(4):
-            position_vec = [position[0], position[1]-0.5*(i+1), 0.0, 0.25*(0.8**i)]
+            position_vec = [position[0], position[1]-0.5*(i+1), 0.0, 1.0]
             texture_vec = [tex_tail, 0.25, 1.0, 1.0]  # Texture index, color rotation, saturation, alpha
             self.creature_parts[max_parts * index + (i+1), :] = position_vec + texture_vec + animation_vec
+
+        Interpolator.add_interpolator(self.creature_parts,
+                                      np.s_[max_parts * index:max_parts * index + 5, 3],
+                                      [0.0, 1.0],
+                                      [[0.0, 0.0, 0.0, 0.0, 0.0], [0.5, 0.25, 0.25*0.8, 0.25*0.8**2, 0.25*0.8**2]])
 
     def add_animation(self, type, position, rotation=None, scale=1.0, relative_start_time=0.0, num_loops=1):
         print('Adding animation {} at position {}'.format(type, position))
@@ -362,6 +383,10 @@ class Culture(TimeAware):
             alpha_frame = 1.0
             start_frame, end_frame = 1.0, 16.0 # FIXME: halutaanko kovakoodata nämä
             loop_time = 1.0
+            Interpolator.add_interpolator(self.animation_gfx,
+                                          np.s_[index, 3],
+                                          [0.0, 1.0],
+                                          [[0.0], [1.0]])
         elif type == 'contact':
             start_frame, end_frame = 17.0, 34.0
             loop_time = 2.0
