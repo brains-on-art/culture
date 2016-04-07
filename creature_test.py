@@ -143,12 +143,12 @@ class Culture(TimeAware):
         # self.dt = p0.0
 
     def demo_init(self):
-        # for i in range(5):
-        #     self.add_creature('jelly', tuple(np.random.rand(2)*20.0 - 10.0))
-        #     self.add_creature('feet', tuple(np.random.rand(2) * 20.0 - 10.0))
-        #     self.add_creature('simple', tuple(np.random.rand(2) * 20.0 - 10.0))
-        #     self.add_creature('sperm', tuple(np.random.rand(2) * 20.0 - 10.0))
-        self.add_creature('sperm', tuple(np.random.rand(2) * 20.0 - 10.0))
+        for i in range(2):
+            self.add_creature('jelly', tuple(np.random.rand(2)*20.0 - 10.0))
+            self.add_creature('feet', tuple(np.random.rand(2) * 20.0 - 10.0))
+            self.add_creature('simple', tuple(np.random.rand(2) * 20.0 - 10.0))
+            self.add_creature('sperm', tuple(np.random.rand(2) * 20.0 - 10.0))
+        #self.add_creature('sperm', tuple(np.random.rand(2) * 20.0 - 10.0))
 
         # for i in range(10):
         #     self.add_food(np.random.rand(2)*20.0 - 10.0)
@@ -194,8 +194,9 @@ class Culture(TimeAware):
             print('get_texture: no group named:', group)
             return None
 
-    def add_creature(self, type, position):
+    def add_creature(self, type, position, data=None):
         print('Adding creature ({}) at position {}'.format(type, position))
+        print('Using data: ', data)
 
         index = _find_first(self.creature_data['alive'], 0)
         if index == -1: # Creature data is full
@@ -207,7 +208,7 @@ class Culture(TimeAware):
 
         cp['target'] = pm.Body(10.0, 10.0)
         cp['target'].position = position
-        cp['target'].position += (0.0, 30.0)
+        cp['target'].position += (0.0, 10.0)
 
         cp['body'] = [pm.Body(10.0, 5.0) for x in range(max_parts)]
         for i in range(max_parts):
@@ -227,18 +228,20 @@ class Culture(TimeAware):
                              'sperm': self.add_sperm}[type]
         creature_function(index, position)
 
+        #{'mojo': 4, 'max_age': 0.18328243481718498, 'agressiveness_base': 1, 'power': 32215.83847390449, 'virility_base': 183.04049763745167, 'slave_id': 1, 'agility_base': 139.6109314200933, 'type': 0.0}
+        data = data if data is not None else {}
         self.creature_data[index]['alive'] = 1
-        self.creature_data[index]['max_age'] = np.random.random(1) * 180 + 180
+        self.creature_data[index]['max_age'] = data['max_age'] if ('max_age' in data) and (data['max_age'] is not None) else np.random.random(1) * 180 + 180
         self.creature_data[index]['age'] = 0
         self.creature_data[index]['size'] = 0.5
         self.creature_data[index]['mood'] = 1
         self.creature_data[index]['started_colliding'] = 0.0
         self.creature_data[index]['ended_interaction'] = 0.0
-        self.creature_data[index]['agility_base'] = np.random.random()
-        self.creature_data[index]['virility_base'] = np.random.random()
-        self.creature_data[index]['mojo'] = np.random.random()
-        self.creature_data[index]['aggressiveness_base'] = np.random.random()
-        self.creature_data[index]['power'] = np.random.random()
+        self.creature_data[index]['agility_base'] = data['agility_base'] if ('agility_base' in data) and (data['agility_base'] is not None) else np.random.random()
+        self.creature_data[index]['virility_base'] = data['virility_base'] if ('virility_base' in data) and (data['virility_base'] is not None) else np.random.random()
+        self.creature_data[index]['mojo'] = data['mojo'] if ('mojo' in data) and (data['mojo'] is not None) else np.random.random()
+        self.creature_data[index]['aggressiveness_base'] = data['agressiveness_base'] if ('aggressiveness_base' in data) and (data['agressiveness_base'] is not None) else np.random.random()
+        self.creature_data[index]['power'] = data['power'] if ('power' in data) and (data['power'] is not None) else np.random.random()
         self.creature_data[index]['hunger'] = 0.5
         # self.creature_data[index]['color']
         self.creature_data[index]['interacting_with'] = -1
@@ -825,16 +828,20 @@ def main():
         try:
             message = socket.recv_json(zmq.NOBLOCK)
             print(message)
-            creature_type = np.random.choice(['feet', 'simple', 'jelly', 'sperm'])
-            # box_id = message['slave_id']
-            box_id = np.random.choice([1,2,3])
+            creature_types = ['feet', 'simple', 'jelly', 'sperm']
+            if message and 'type' in message:
+                creature_type = creature_types[np.clip(int(message['type']),0,3)]
+            else:
+                creature_type = np.random.choice(creature_types)
+            box_id = message['slave_id']
+            #box_id = np.random.choice([1,2,3])
             if box_id == 1:
-                position = (-6,-6)
+                position = (-7.5,-5.5)
             elif box_id == 2:
-                position = (0,8)
+                position = (0,9)
             elif box_id == 3:
-                position = (6,-6)
-            culture.add_creature(creature_type, position)
+                position = (7.5,-5.5)
+            culture.add_creature(creature_type, position, message)
             socket.send_string('OK', zmq.NOBLOCK)
         except zmq.error.Again:
             pass # no messages from sensor stations
