@@ -112,11 +112,12 @@ class Culture(TimeAware):
             return False
         self.pm_space.add_collision_handler(1, 1, begin=ignore_collision)
 
-        walls = [pm.Segment(self.pm_space.static_body, (-13, 13), (13, 13), 0.1)
-                ,pm.Segment(self.pm_space.static_body, (13, 13), (13, -13), 0.1)
-                ,pm.Segment(self.pm_space.static_body, (13, -13), (-13, -13), 0.1)
-                ,pm.Segment(self.pm_space.static_body, (-13, -13), (-13, 13), 0.1)
-                ]
+        num_points = 30
+        radius = 13.0
+        theta = np.linspace(0, 2 * np.pi, num_points)
+        x, y = radius * np.cos(theta), radius * np.sin(theta) # FIXME: skaalaa x täsmäämään altaan kanssa
+        x[-1], y[-1] = x[0], y[0]
+        walls = [pm.Segment(self.pm_space.static_body, (x[i], y[i]), (x[i+1], y[i+1]), 0.1) for i in range(num_points-1)]
         for wall in walls:
             wall.collision_type = 2
         self.pm_space.add(walls)
