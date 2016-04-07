@@ -14,6 +14,8 @@ from scipy.spatial.distance import cdist as distm
 sys.path.append('./pymunk')
 import pymunk as pm
 
+from boa_gfx.time import TimeAware, TimeKeeper
+
 zmq_port = '5556'
 max_creatures = 25
 max_parts = 5
@@ -22,7 +24,7 @@ offscreen_position = (30.0, 30.0, 0.0)
 max_food = 100
 max_animations = 100
 
-resting_period = 10
+resting_period = 60
 
 @numba.jit
 def _find_first(vec, item):
@@ -49,7 +51,7 @@ def create_new_sa_array(name, shape, dtype):
     return sa_array
 
 
-class Culture(object):
+class Culture(TimeAware):
     def __init__(self):
         # Create creature parts array to share with visualization
         self.creature_parts = create_new_sa_array('creature_parts', (max_creatures*max_parts, 12), np.float32)
@@ -76,7 +78,8 @@ class Culture(object):
                                 ('power', float),
                                 ('hunger', float),
                                 ('type', int),
-                                ('color', int)])
+                                ('color', int),
+                                ('interacting_with', int)])
         self.creature_data.alive = 0
         self.creature_data.max_age = 100.0
         self.creature_data.size = 0.5
@@ -130,7 +133,8 @@ class Culture(object):
         self.animation_gfx[:, 3:] = 1.0  # Avoid undefined behavior by setting everything to one
         self.next_animation = 0
 
-        self.demo_init()
+        self.scheduler.enter(3.0, 0.0, self.demo_init)
+        #self.demo_init()
 
         self.prev_update = time.perf_counter()
         self.ct = time.perf_counter()
@@ -139,13 +143,10 @@ class Culture(object):
 
     def demo_init(self):
         for i in range(5):
-            self.add_jelly(i, tuple(np.random.rand(2)*20.0 - 10.0))
-
-        for i in range(5):
-            self.add_simple(i+5, tuple(np.random.rand(2)*20.0 - 10.0))
-
-        for i in range(5):
-            self.add_feet(i + 10, tuple(np.random.rand(2) * 20.0 - 10.0))
+            self.add_creature('jelly', tuple(np.random.rand(2)*20.0 - 10.0))
+            self.add_creature('feet', tuple(np.random.rand(2) * 20.0 - 10.0))
+            self.add_creature('simple', tuple(np.random.rand(2) * 20.0 - 10.0))
+            self.add_creature('sperm', tuple(np.random.rand(2) * 20.0 - 10.0))
 
         for i in range(10):
             self.add_food(np.random.rand(2)*20.0 - 10.0)
@@ -191,10 +192,13 @@ class Culture(object):
             print('get_texture: no group named:', group)
             return None
 
-    def add_jelly(self, index, position):
-        print('Creating jelly at index {}'.format(index))
-        # if self.creature_data[index, 0] == 1.0:
-        if self.creature_data[index]['alive'] == 1:
+    def add_creature(self, type, position):
+        print('Adding creature ({}) at position {}'.format(type, position))
+
+        index = _find_first(self.creature_data['alive'], 0)
+        if index == -1: # Creature data is full
+            print('Creature data is full, instakilling oldest creature')
+            index = self.creature_data['age'].argmax()
             self.remove_creature(index)
 
         cp = self.creature_physics[index]
@@ -204,85 +208,22 @@ class Culture(object):
         cp['target'].position += (0.0, 30.0)
 
         cp['body'] = [pm.Body(10.0, 5.0) for x in range(max_parts)]
-        head, mid, tail = cp['body'][0:3]
-        head.position = position
-        mid.position = head.position + (0.0, -1.0)
-        tail.position = head.position + (0.0, -2.0)
-        cp['body'][3].position = (30.0, 30.0)  # UNUSED
-        cp['body'][4].position = (30.0, 30.0)  # UNUSED
+        for i in range(max_parts):
+            cp['body'][i].position = (30.0 + 20.0*index + 2*i, 30.0 + 20.0*index + 2*i)
 
+        head = cp['body'][0]
         head_offset = pm.Vec2d((0.0, 0.4))
-        print(head_offset)
-        cp['constraint'] = [pm.constraint.DampedSpring(head, cp['target'], head_offset, (0.0, 0.0), 0.0, 10.0, 15.0),
-                            pm.constraint.SlideJoint(head, mid, (0.4, -0.3), (0.4, 0.3), 0.1, 0.2),
-                            pm.constraint.SlideJoint(head, mid, (-0.4, -0.3), (-0.4, 0.3), 0.1, 0.2),
-                            pm.constraint.SlideJoint(mid, tail, (0.0, -0.1), (0.0, 0.1), 0.1, 0.5)]
+        cp['constraint'] = [pm.constraint.DampedSpring(head, cp['target'], head_offset, (0.0, 0.0), 0.0, 10.0, 15.0)]
 
-        shape = pm.Circle(head, self.creature_parts[index*max_parts, 3]) # use the scale of the first creature part
-        shape.collision_type = 1
-        cp['shape'] = shape
-        self.pm_space.add(cp['shape'])
-        self.pm_space.add(cp['body'][0:3])
-        self.pm_space.add(cp['constraint'])
-
-        cp['active'] = True
-
-        # self.creature_data[index, :] = [1.0, np.random.random(1)*10+10, 0.0, 0.5]  # Alive, max_age, age, size
-        self.creature_data[index]['alive'] = 1
-        self.creature_data[index]['max_age'] = np.random.random(1)*180+180
-        self.creature_data[index]['age'] = 0
-        self.creature_data[index]['size'] = 0.5
-        self.creature_data[index]['mood'] = 1
-        self.creature_data[index]['started_colliding'] = 0.0
-        self.creature_data[index]['ended_interaction'] = 0.0
-        self.creature_data[index]['agility_base'] = np.random.random()
-        self.creature_data[index]['virility_base'] = np.random.random()
-        self.creature_data[index]['mojo'] = np.random.random()
-        self.creature_data[index]['aggressiveness_base'] = np.random.random()
-        self.creature_data[index]['power'] = np.random.random()
-        self.creature_data[index]['hunger'] = 0.5
-        self.creature_data[index]['type'] = 1
-        # self.creature_data[index]['color']
-
-        position_vec = [position[0], position[1], 0.0, 0.5]  # Position, rotation, scale
-        animation_vec = [0.0, 1.0, 1.0, 1.0]  # Animation time offset, beat frequency, swirl radius, swirl frequency
-        for i in range(3):
-            texture_vec = [self.get_texture('jelly'), 0.0, 1.0, 1.0]  # Texture index, color rotation, saturation, alpha
-            self.creature_parts[max_parts*index+i, :] = position_vec + texture_vec + animation_vec
-
-    def add_feet(self, index, position):
-        print('Creating jelly at index {}'.format(index))
-        # if self.creature_data[index, 0] == 1.0:
-        if self.creature_data[index]['alive'] == 1:
-            self.remove_creature(index)
-
-        cp = self.creature_physics[index]
-
-        cp['target'] = pm.Body(10.0, 10.0)
-        cp['target'].position = position
-        cp['target'].position += (0.0, 30.0)
-
-        cp['body'] = [pm.Body(10.0, 5.0) for x in range(max_parts)]
-        top, bottom = cp['body'][0:2]
-        top.position = position
-        bottom.position = position
-        for i in range(1, 5):
-            cp['body'][i].position = offscreen_position[:2]
-
-        head_offset = pm.Vec2d((0.0, 0.4))
-        cp['constraint'] = [pm.constraint.DampedSpring(top, cp['target'], head_offset, (0.0, 0.0), 0.0, 10.0, 15.0),
-                            pm.constraint.PivotJoint(top, bottom, (0.0, 0.0), (0.0, 0.0)),
-                            pm.constraint.GearJoint(top, bottom, 0.0, 1.0)]
-
-        shape = pm.Circle(top, self.creature_parts[index*max_parts, 3]) # use the scale of the first creature part
+        shape = pm.Circle(head, self.creature_parts[index * max_parts, 3])  # use the scale of the first creature part
         shape.collision_type = 1
         cp['shape'] = shape
 
-        self.pm_space.add(cp['shape'])
-        self.pm_space.add(cp['body'][0:2])
-        self.pm_space.add(cp['constraint'])
-
-        cp['active'] = True
+        creature_function = {'jelly': self.add_jelly,
+                             'feet': self.add_feet,
+                             'simple': self.add_simple,
+                             'sperm': self.add_sperm}[type]
+        creature_function(index, position)
 
         self.creature_data[index]['alive'] = 1
         self.creature_data[index]['max_age'] = np.random.random(1) * 180 + 180
@@ -297,76 +238,128 @@ class Culture(object):
         self.creature_data[index]['aggressiveness_base'] = np.random.random()
         self.creature_data[index]['power'] = np.random.random()
         self.creature_data[index]['hunger'] = 0.5
-        self.creature_data[index]['type'] = 3
+        # self.creature_data[index]['color']
+        self.creature_data[index]['interacting_with'] = -1
+
+        f = lambda: self.activate_creature_physics(index)
+
+        self.scheduler.enter(4.0, 0.0, f)
+
+        self.add_animation('birth', position, relative_start_time=3.0)
+
+    def activate_creature_physics(self, index):
+        cp = self.creature_physics[index]
+
+        self.pm_space.add(cp['shape'])
+        self.pm_space.add(cp['body'])
+        self.pm_space.add(cp['constraint'])
+
+        cp['active'] = True
+
+    def deactivate_creature_physics(self, index):
+        cp = self.creature_physics[index]
+
+        if cp['active']:
+            self.pm_space.remove(cp['shape'])
+            self.pm_space.remove(cp['body'])
+            self.pm_space.remove(cp['constraint'])
+
+            cp['active'] = False
+
+    def add_jelly(self, index, position):
+        print('Creating jelly at index {}'.format(index))
+        self.creature_data[index]['type'] = 1  # JELLY
+
+        cp = self.creature_physics[index]
+        head, mid, tail = cp['body'][0:3]
+        head.position = position
+        mid.position = head.position + (0.0, -0.3)
+        tail.position = head.position + (0.0, -0.6)
+
+        cp['constraint'] += [pm.constraint.SlideJoint(head, mid, (0.0, -0.1), (0.0, 0.1), 0.1, 0.5),
+                             pm.constraint.RotaryLimitJoint(head, mid, -0.5, 0.5),
+                             pm.constraint.SlideJoint(mid, tail, (0.0, -0.1), (0.0, 0.1), 0.1, 0.5),
+                             pm.constraint.RotaryLimitJoint(mid, tail, -0.5, 0.5)]
+
+
+        animation_vec = [0.0, 1.0, 1.0, 1.0]  # Animation time offset, beat frequency, swirl radius, swirl frequency
+        for i in range(3):
+            position_vec = [position[0], position[1]-0.3*(i+1), 0.0, 0.5]  # Position, rotation, scale
+            texture_vec = [self.get_texture('jelly'), 0.0, 1.0, 1.0]  # Texture index, color rotation, saturation, alpha
+            self.creature_parts[max_parts*index+i, :] = position_vec + texture_vec + animation_vec
+
+    def add_feet(self, index, position):
+        print('Creating feet at index {}'.format(index))
+        self.creature_data[index]['type'] = 2
+
+        cp = self.creature_physics[index]
+
+        top, bottom = cp['body'][:2]
+        top.position = position
+        bottom.position = position
+
+        cp['constraint'] += [pm.constraint.PivotJoint(top, bottom, (0.0, 0.0), (0.0, 0.0)),
+                             pm.constraint.GearJoint(top, bottom, 0.0, 1.0)]
 
         position_vec = [position[0], position[1], 0.0, 0.5]  # Position, rotation, scale
         animation_vec = [0.0, 1.0, 1.0, 1.0]  # Animation time offset, beat frequency, swirl radius, swirl frequency
         tex = self.get_texture('feet')
         texture_vec = [tex[1], 0.0, 1.0, 1.0]
         self.creature_parts[max_parts * index, :] = position_vec + texture_vec + animation_vec
-        texture_vec = [tex[0], 0.25, 1.0, 1.0]
+        texture_vec = [tex[0], 0.25, 1.0, 0.01]
         self.creature_parts[max_parts * index + 1, :] = position_vec + texture_vec + animation_vec
 
     def add_simple(self, index, position):
         print('Creating simple at {} (index {})'.format(position, index))
-
-        if self.creature_data[index]['alive'] == 1:
-            self.remove_creature(index)
+        self.creature_data[index]['type'] = 3
 
         cp = self.creature_physics[index]
 
-        cp['target'] = pm.Body(10.0, 10.0)
-        cp['target'].position = position
-        cp['target'].position += (0.0, 30.0)
-
-        cp['body'] = [pm.Body(10.0, 5.0) for x in range(max_parts)]
         head = cp['body'][0]
         head.position = position
-        for i in range(1, 5):
-            cp['body'][i].position = offscreen_position[:2]
-
-        head_offset = pm.Vec2d((0.0, 0.4))
-        cp['constraint'] = [pm.constraint.DampedSpring(head, cp['target'], head_offset, (0.0, 0.0), 0.0, 10.0, 15.0)]
-
-        shape = pm.Circle(head, self.creature_parts[index*max_parts, 3]) # use the scale of the first creature part
-        shape.collision_type = 1
-        cp['shape'] = shape
-
-        self.pm_space.add(cp['shape'])
-        self.pm_space.add(cp['body'][0:1])
-        self.pm_space.add(cp['constraint'])
-
-        cp['active'] = True
-
-        self.creature_data[index]['alive'] = 1
-        self.creature_data[index]['max_age'] = np.random.random(1) * 180 + 180
-        self.creature_data[index]['age'] = 0
-        self.creature_data[index]['size'] = 0.5
-        self.creature_data[index]['mood'] = 1
-        self.creature_data[index]['started_colliding'] = 0.0
-        self.creature_data[index]['ended_interaction'] = 0.0
-        self.creature_data[index]['agility_base'] = np.random.random()
-        self.creature_data[index]['virility_base'] = np.random.random()
-        self.creature_data[index]['mojo'] = np.random.random()
-        self.creature_data[index]['aggressiveness_base'] = np.random.random()
-        self.creature_data[index]['power'] = np.random.random()
-        self.creature_data[index]['hunger'] = 0.5
-        self.creature_data[index]['type'] = 2
 
         position_vec = [position[0], position[1], 0.0, 0.5]  # Position, rotation, scale
         animation_vec = [0.0, 1.0, 1.0, 1.0]  # Animation time offset, beat frequency, swirl radius, swirl frequency
         texture_vec = [self.get_texture('simple'), 0.0, 1.0, 1.0]
         self.creature_parts[max_parts*index, :] = position_vec + texture_vec + animation_vec
 
+    def add_sperm(self, index, position):
+        print('Creating sperm at index {}'.format(index))
+        self.creature_data[index]['type'] = 4
+
+        cp = self.creature_physics[index]
+
+        for i in range(5):
+            cp['body'][i].position = position
+            cp['body'][i].position += (0.0, -0.5*i)
+
+        for i in range(4):
+            a = cp['body'][i]
+            b = cp['body'][i+1]
+            cp['constraint'].append(pm.constraint.SlideJoint(a, b, (0.0, -0.3), (0.0, 0.3), 0.1*(0.8**i), 0.2*(0.8**i)))
+            cp['constraint'].append(pm.constraint.RotaryLimitJoint(a, b, -0.5, 0.5))
+
+        position_vec = [position[0], position[1], 0.0, 0.5]  # Position, rotation, scale
+        animation_vec = [0.0, 1.0, 1.0, 1.0]  # Animation time offset, beat frequency, swirl radius, swirl frequency
+        tex_head, tex_tail = self.get_texture('sperm'), self.get_texture('sperm')
+        texture_vec = [tex_head, 0.0, 1.0, 1.0]  # Texture index, color rotation, saturation, alpha
+        self.creature_parts[max_parts * index, :] = position_vec + texture_vec + animation_vec
+        for i in range(4):
+            position_vec = [position[0], position[1]-0.5*(i+1), 0.0, 0.25*(0.8**i)]
+            texture_vec = [tex_tail, 0.25, 1.0, 1.0]  # Texture index, color rotation, saturation, alpha
+            self.creature_parts[max_parts * index + (i+1), :] = position_vec + texture_vec + animation_vec
+
     def add_animation(self, type, position, rotation=None, scale=1.0, relative_start_time=0.0, num_loops=1):
+        print('Adding animation {} at position {}'.format(type, position))
         # Add animation to next slot
         index = self.next_animation
 
-        print('Adding {} animation at {} (index {})'.format(type, position, index))
+        # print('Adding {} animation at {} (index {})'.format(type, position, index))
         alpha_frame = omega_frame = 0.0
 
         # Get animation specific parameters
         if type == 'birth':
+            alpha_frame = 1.0
             start_frame, end_frame = 1.0, 16.0 # FIXME: halutaanko kovakoodata nämä
             loop_time = 1.0
         elif type == 'contact':
@@ -374,13 +367,13 @@ class Culture(object):
             loop_time = 2.0
         elif type == 'death':
             scale *= 1.5
-            start_frame, end_frame = 35.0, 56.0
+            start_frame, end_frame = 35.0, 49.0
             loop_time = 3.0
         elif type == 'fight':
-            start_frame, end_frame = 57.0, 74.0
+            start_frame, end_frame = 50.0, 67.0
             loop_time = 2.0
         elif type == 'reproduction':
-            start_frame, end_frame = 75.0, 92.0
+            start_frame, end_frame = 68.0, 85.0
             loop_time = 2.0
         else:
             return None
@@ -407,13 +400,13 @@ class Culture(object):
             param1_vec[2] += loop_time / 3.0
             old_index.append(index)
             index = index + 1 if index < max_animations - 1 else 0
-            print('Adding {} animation at {} (index {})'.format(type, position, index))
+            # print('Adding {} animation at {} (index {})'.format(type, position, index))
             self.animation_gfx[index, :11] = position_vec + param1_vec + param2_vec
 
             param1_vec[2] += loop_time / 3.0
             old_index.append(index)
             index = index + 1 if index < max_animations - 1 else 0
-            print('Adding {} animation at {} (index {})'.format(type, position, index))
+            # print('Adding {} animation at {} (index {})'.format(type, position, index))
             self.animation_gfx[index, :11] = position_vec + param1_vec + param2_vec
 
             self.next_animation = index + 1 if index < max_animations - 1 else 0
@@ -429,7 +422,7 @@ class Culture(object):
         # Add food to next slot
         index = self.next_food
 
-        print('Addind food at {} (index {})'.format(position, index))
+        print('Adding food at {} (index {})'.format(position, index))
 
         # Randomize rotation by default
         if rotation is None:
@@ -450,19 +443,21 @@ class Culture(object):
 
     def remove_creature(self, index):
         print('Removing creature at index {}'.format(index))
-        cp = self.creature_physics[index]
-        self.pm_space.remove(cp['constraint'])
-        self.pm_space.remove(cp['shape'])
-        # self.pm_space.remove(cp['body'])
+        self.deactivate_creature_physics(index)
 
-        cp['active'] = False
+        cp = self.creature_physics[index]
         cp['target'] = None
         cp['body'] = None
         cp['constraint'] = None
         cp['shape'] = None
 
         self.creature_data[index] = np.zeros(len(self.creature_data.dtype.names))
-        self.creature_parts[index:index+max_parts, :3] = offscreen_position
+        self.creature_data[index]['max_age'] = 1.0
+
+        def f():
+            self.creature_parts[index*max_parts:(index+1)*max_parts-1, :3] = offscreen_position
+
+        self.scheduler.enter(8.0, 0.0, f)
 
     def update(self, dt):
         self.ct = time.perf_counter()
@@ -481,24 +476,26 @@ class Culture(object):
         cur_age = self.creature_data['age']
         cur_age[:] += dt
         # ...and compute the other dynamic params
-        hunger = self.creature_data['hunger'] + dt
-        agility = self.creature_data['agility_base'] * (1 - (self.creature_data['age'] / self.creature_data['max_age']))
-        succulence = 1 - hunger
-        aggr = self.creature_data['aggressiveness_base'] + self.creature_data['hunger']
-        virility = self.creature_data['virility_base'] + 1 - self.creature_data['hunger']
+        hunger = self.creature_data['hunger']
+        hunger[:] += dt / 5
+        self.creature_data['hunger'] = np.clip(hunger, 0, 1)
+        # agility = self.creature_data['agility_base'] * (1 - (self.creature_data['age'] / self.creature_data['max_age']))
+        # succulence = 1 - hunger
+        # aggr = self.creature_data['aggressiveness_base'] + self.creature_data['hunger']
+        # virility = self.creature_data['virility_base'] + 1 - self.creature_data['hunger']
         mood = self.creature_data['mood']
         creature_type = self.creature_data['type']
         started_colliding = self.creature_data['started_colliding']
+        interacting_with = self.creature_data['interacting_with']
         last_interacted = self.creature_data['ended_interaction']
 
         # Update appearance changes from aging and remove dead creatures
-        self.creature_parts[:, 6] = np.clip(1.0 - (cur_age / max_age), 0.0, 1.0).repeat(5)
-        self.creature_parts[:, 7] = np.clip(1.0 - (cur_age - max_age)/5.0, 0.0, 1.0).repeat(5)
-        dead_creatures = (alive == 1.0) & (cur_age > max_age + 5.0)
+        self.creature_parts[:, 6] = np.clip(1.0 - (cur_age / max_age), 0.0, 1.0).repeat(max_parts)
+        self.creature_parts[:, 7] = np.clip(1.0 - (cur_age - max_age)/3.0, 0.0, 1.0).repeat(max_parts)
+        dead_creatures = (alive == 1.0) & (cur_age > max_age + 3.0)
         for ind in np.where(dead_creatures)[0]:
             self.remove_creature(ind)
 
-        #t1 = time.perf_counter()
         # Find colliding creatures and deal with them
         # time1 = time.perf_counter()
         collisions, distances, radii = self.get_collision_matrix()
@@ -514,16 +511,16 @@ class Culture(object):
                     continue
                 distances[i,i] = np.inf # make sure not to choose yourself
                 other = np.argmin(distances[i]) # and then choose the closest one
-                # NB DONT ASSERT IN PRODUCTION
-                # assert (np.argmin(distances[other]) == i) and (distances[i,other] < radii[i,other])
                 self.creature_parts[i*max_parts, 7] = 0.2
 
                 if self.can_start_interaction([i,other]):
-                    print('{} found to be colliding with {}, with distance {} (radii sum {})'.format(i, other, distances[i,other], radii[i,other]))
+                    # print('{} found to be colliding with {}, with distance {} (radii sum {})'.format(i, other, distances[i,other], radii[i,other]))
                     mood[[i,other]] = 0
+                    interacting_with[i] = other
+                    interacting_with[other] = i
                     started_colliding[[i, other]] = self.ct
 
-        # Move creatures that are able to move (mood == 1)
+        # Handle behaviours
         for i in range(max_creatures):
             cp = self.creature_physics[i]
             if not alive[i]:
@@ -532,27 +529,19 @@ class Culture(object):
 
             if mood[i] == 0:
                 # just started colliding
-                print('{} started interaction'.format(i))
+                self.start_interaction(i, interacting_with[i])
                 # so go to next state and fire animation
-                mood[i] = -1
-                self.add_animation('contact',
-                                   position=cp['body'][0].position,
-                                   rotation=np.random.rand() * 2 * np.pi,
-                                   num_loops=1)
+
             elif mood[i] == -1:
+                # already in an interaction
                 if (self.ct - started_colliding[i]) < 5:
-                    # not done with dancing
-                    map(lambda b: b.reset_forces(), cp['body'])
-                    for body in cp['body']:
-                        body.velocity = (0, 0)
+                    # not yet done with dancing
+                    # map(lambda b: b.reset_forces(), cp['body'])
+                    # for body in cp['body']:
+                        # body.velocity = (0, 0)
+                    self.deactivate_creature_physics(i)
                 else:
-                    #end interaction
-                    self.add_animation('fight',
-                                       position=cp['body'][0].position,
-                                       rotation=np.random.rand() * 2 * np.pi,
-                                       num_loops=1)
-                    mood[i] = 1
-                    last_interacted[i] = self.ct
+                    self.end_interaction(i, interacting_with[i])
 
             elif mood[i] == 1:
                 # Default mood, move creatures according to their type
@@ -567,17 +556,178 @@ class Culture(object):
         # Advance the physics simulation and sync physics with graphics
         self.pm_space.step(dt)
 
-        positions = [[(body.position.x, body.position.y, -body.angle) for body in creature['body']]
-                     if creature['active']
-                     else [offscreen_position for x in range(max_parts)]
-                     for creature in self.creature_physics]
-        positions = np.array(positions).reshape(max_creatures*max_parts, 3)
-        self.creature_parts[:, :3] = positions
+        #t1 = time.perf_counter()
+        mask = np.array([creature['active'] for creature in self.creature_physics]).repeat(max_parts)
+        positions = np.array([[(body.position.x, body.position.y, -body.angle) for body in creature['body']]
+                              for creature in self.creature_physics if creature['active']]).reshape(mask.sum(), 3)
+        self.creature_parts[mask, :3] = positions
+        #t2 = time.perf_counter()
+        #print(t2-t1)
+
+        #t1 = time.perf_counter()
+        #positions = [[(body.position.x, body.position.y, -body.angle) for body in creature['body']]
+        #             if creature['active']
+        #             else [offscreen_position for x in range(max_parts)]
+        #             for creature in self.creature_physics]
+        #positions = np.array(positions).reshape(max_creatures*max_parts, 3)
+        #self.creature_parts[:, :3] = positions
+        #print(t2-t1)
 
     def can_start_interaction(self, arr_like):
         mood = self.creature_data['mood']
         last_interacted = self.creature_data['ended_interaction']
         return (mood[arr_like] == 1).all() and ((self.ct - last_interacted[arr_like]) > resting_period).all()
+
+    def start_interaction(self, a, b):
+        alive = self.creature_data['alive']
+        if not (alive[[a,b]] == 1).all():
+            raise NameError('{} and {} wanted to start interacting but one was dead: {}'.format(a,b,alive[[a,b]]))
+        mood = self.creature_data['mood']
+        checks = {a: {'aggr': self.aggr_check(a),
+                    'virility': self.virility_check(a)},
+                    b: {'aggr': self.aggr_check(b),
+                    'virility': self.virility_check(b)}}
+        # set animations immediately depending on aggression levels
+        for i in [a,b]:
+            anim = 'contact'
+            if checks[i]['aggr']:
+                # anim = 'fight'
+                self.add_animation('fight',
+                                   position=(self.creature_physics[i]['body'][0].position.x, self.creature_physics[i]['body'][0].position.y),
+                                   rotation=np.random.rand() * 2 * np.pi,
+                                   num_loops=1)
+            if checks[i]['virility']:
+                # anim = 'reproduction'
+                self.add_animation('reproduction',
+                                   position=(self.creature_physics[i]['body'][0].position.x, self.creature_physics[i]['body'][0].position.y),
+                                   rotation=np.random.rand() * 2 * np.pi,
+                                   num_loops=1,
+                                   relative_start_time=0.08)
+            if not (checks[i]['aggr'] or checks[i]['virility']):
+                self.add_animation('contact',
+                                   position=(self.creature_physics[i]['body'][0].position.x, self.creature_physics[i]['body'][0].position.y),
+                                   rotation=np.random.rand() * 2 * np.pi,
+                                   num_loops=1)
+            mood[i] = -1
+
+    def end_interaction(self, a, b):
+        alive = self.creature_data['alive']
+        if not (alive[[a,b]] == 1).all():
+            raise NameError('{} and {} wanted to start interacting but one was dead: {}'.format(a,b,alive[[a,b]]))
+        mood = self.creature_data['mood']
+        checks = {a: {'aggr': self.aggr_check(a),
+                    'virility': self.virility_check(a)},
+                    b: {'aggr': self.aggr_check(b),
+                    'virility': self.virility_check(b)}}
+
+        # CASES:
+        # 1. Both want a fight
+        if checks[a]['aggr'] and checks[b]['aggr']:
+            winner = self.power_check(a, b)
+            loser = a if winner == b else b
+            print('both wanted a fight: {} killed {}'.format(winner, loser))
+            # self.add_animation('death',
+            #                    position=(self.creature_physics[loser]['body'][0].position.x, self.creature_physics[loser]['body'][0].position.y),
+            #                    rotation=np.random.rand() * 2 * np.pi,
+            #                    num_loops=1)
+
+            x = self.creature_physics[loser]['body'][0].position.x
+            y = self.creature_physics[loser]['body'][0].position.y
+            def play_animation(x,y):
+                self.add_animation('death',
+                               position=(x, y),
+                               rotation=np.random.rand() * 2 * np.pi,
+                               num_loops=1)
+            self.scheduler.enter(1, 0.0, play_animation, (x,y))
+
+            self.creature_data['hunger'][winner] = 0
+            self.remove_creature(loser)
+            self.activate_creature_physics(winner)
+            mood[winner] = 1
+
+        # 2. One wants to fight, other wants to run away
+        elif checks[a]['aggr'] or checks[b]['aggr']:
+            # aggr = self.creature_data['aggressiveness_base'] + self.creature_data['hunger']
+            aggressor = a if checks[a]['aggr'] else b
+            escaper = b if aggressor == a else a
+            escaped = self.escape_attempt(escaper, aggressor)
+            if escaped:
+                # mood[[a,b]] = 1
+                # self.creature_data[[a,b]]['ended_interaction'] = self.ct
+                # print('{} got away'.format(escaper))
+                map(self.activate_creature_physics, [a,b])
+                mood[[a,b]] = 1
+                print('{} wanted to fight {}, but it got away'.format(aggressor, escaper))
+            else:
+                # self.add_animation('death',
+                #                    position=(self.creature_physics[escaper]['body'][0].position.x, self.creature_physics[escaper]['body'][0].position.y),
+                #                    rotation=np.random.rand() * 2 * np.pi,
+                #                    num_loops=1)
+                x = self.creature_physics[escaper]['body'][0].position.x
+                y = self.creature_physics[escaper]['body'][0].position.y
+                def play_animation(x,y):
+                    self.add_animation('death',
+                                   position=(x, y),
+                                   rotation=np.random.rand() * 2 * np.pi,
+                                   num_loops=1)
+                self.scheduler.enter(1, 0.0, play_animation, (x,y))
+
+                self.remove_creature(escaper)
+                self.creature_data['hunger'][aggressor] = 0
+                self.activate_creature_physics(aggressor)
+                mood[aggressor] = 1
+                # print('{} was killed'.format(escaper))
+                print('{} wanted to fight {}, AND KILLED IT'.format(aggressor, escaper))
+
+        # 4. Both want to reproduce
+        elif checks[a]['virility'] and checks[b]['virility']:
+            # create new based on a, b
+            map(self.activate_creature_physics, [a,b])
+            mood[[a,b]] = 1
+            print('HUBBA HUBBA, {} and {} reproduced'.format(a,b))
+
+        # 5. One wants to reproduce, other wants to run
+        elif checks[a]['virility'] or checks[b]['virility']:
+            virility = self.creature_data['virility_base'] + 1 - self.creature_data['hunger']
+            aggressor = a if checks[a]['virility'] else b
+            escaper = b if aggressor == a else a
+            escaped = self.escape_attempt(escaper, aggressor)
+            if escaped:
+                map(self.activate_creature_physics, [a,b])
+                mood[[a,b]] = 1
+                print('{} wanted to reproduce with {}, but they got away'.format(aggressor, escaper))
+            else:
+                # create new based on a, b
+                map(self.activate_creature_physics, [a,b])
+                mood[[a,b]] = 1
+                print('{} wanted to reproduce with {}, but they got away'.format(aggressor, escaper))
+
+        # go back to normal
+        # mood[[a,b]] = 1
+        print('interactions ended for {} and {}'.format(a,b))
+        self.creature_data['ended_interaction'][[a,b]] = self.ct
+        self.creature_data['interacting_with'][[a,b]] = -1
+
+    # Roll a die -> if it's below creatures stat, success
+    def aggr_check(self, i):
+        aggr = self.creature_data['aggressiveness_base'] + self.creature_data['hunger']
+        print('aggro checking {}, base aggr {:.3f}, current aggr {:.3f}'.format(i, self.creature_data['aggressiveness_base'][i], aggr[i]))
+        # return np.random.random() < np.clip(aggr[i], 0.0, 0.9)
+        return np.random.random()*2 < np.clip(aggr[i], 0.0, 1.8)
+    def virility_check(self, i):
+        virility = self.creature_data['virility_base'] + 1 - self.creature_data['hunger']
+        print('virility checking {}, base virility {:.3f}, current virility {:.3f}'.format(i, self.creature_data['virility_base'][i], virility[i]))
+        # return np.random.random() < np.clip(virility[i], 0.0, 0.9)
+        return np.random.random()*2 < np.clip(virility[i], 0.0, 1.8)
+    # Just compare the powers
+    def power_check(self, a, b):
+        power = self.creature_data['power']
+        return a if power[a] > power[b] else b
+
+    # A fight will happen if the aggressor is faster
+    def escape_attempt(self, escaper, aggressor):
+        agility = self.creature_data['agility_base'] * (1 - (self.creature_data['age'] / self.creature_data['max_age']))
+        return agility[escaper] > agility[aggressor]
 
     def get_collision_matrix(self):
         alive = self.creature_data['alive']
@@ -604,11 +754,14 @@ class Culture(object):
 
 
 def main():
+    timekeeper = TimeKeeper()
     culture = Culture()
 
     gfx_p = subprocess.Popen(['python', 'main.py'])
 
     running = True
+
+
 
     def signal_handler(signal_number, frame):
         print('Received signal {} in frame {}'.format(signal_number, frame))
@@ -635,6 +788,7 @@ def main():
             print("I don't know what happened: ", sys.exc_info()[0])
             raise
 
+        timekeeper.update()
         culture.update(0.01)
         time.sleep(0.01)
         if gfx_p.poll() == 0:
