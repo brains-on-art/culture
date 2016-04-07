@@ -203,9 +203,13 @@ class Culture(TimeAware):
             print('get_texture: no group named:', group)
             return None
 
-    def add_creature(self, type, position, data=None):
+    def add_creature(self, type, position, data=None, box_id=None):
         print('Adding creature ({}) at position {}'.format(type, position))
         print('Using data: ', data)
+        if box_id:
+            subprocess.call(["wemo", "switch", "switch-0{}".format(box_id), "off"])
+            fog_off = lambda pos: subprocess.call(["wemo", "switch", "switch-0{}".format(pos), "on"])
+            self.scheduler.enter(8.0, 0.0, fog_off, argument=(box_id,))
 
         index = _find_first(self.creature_data['alive'], False)
         if index == -1: # Creature data is full
@@ -245,8 +249,8 @@ class Culture(TimeAware):
         self.creature_data[index]['age'] = 0
         self.creature_data[index]['size'] = 0.5
         self.creature_data[index]['mood'] = 1
-        self.creature_data[index]['started_colliding'] = 0.0
-        self.creature_data[index]['ended_interaction'] = 0.0
+        self.creature_data[index]['started_colliding'] = self.ct
+        self.creature_data[index]['ended_interaction'] = self.ct
         self.creature_data[index]['agility_base'] = data['agility_base'] if ('agility_base' in data) and (data['agility_base'] is not None) else np.random.random()
         self.creature_data[index]['virility_base'] = data['virility_base'] if ('virility_base' in data) and (data['virility_base'] is not None) else np.random.random()
         self.creature_data[index]['mojo'] = data['mojo'] if ('mojo' in data) and (data['mojo'] is not None) else np.random.random()
@@ -591,7 +595,7 @@ class Culture(TimeAware):
                     continue
                 distances[i,i] = np.inf # make sure not to choose yourself
                 other = np.argmin(distances[i]) # and then choose the closest one
-                self.creature_parts[i*max_parts, 7] = 0.2
+                #self.creature_parts[i*max_parts, 7] = 0.2
 
                 if self.can_start_interaction([i,other]):
                     # print('{} found to be colliding with {}, with distance {} (radii sum {})'.format(i, other, distances[i,other], radii[i,other]))
@@ -663,15 +667,16 @@ class Culture(TimeAware):
 
     def start_interaction(self, a, b):
         alive = self.creature_data['alive'][[a,b]]
-        if not alive.all() or b == -1:
-            return
         mood = self.creature_data['mood']
+        if not alive.all():
+            return
+        elif b == -1:
+            mood[a] = 1
+            return
         checks = {a: {'aggr': self.aggr_check(a),
                     'virility': self.virility_check(a)},
                     b: {'aggr': self.aggr_check(b),
                     'virility': self.virility_check(b)}}
-        
-        # is b -1?
 
         # set animations immediately depending on aggression levels
         for i in [a,b]:
@@ -698,9 +703,12 @@ class Culture(TimeAware):
 
     def end_interaction(self, a, b):
         alive = self.creature_data['alive'][[a,b]]
-        if not alive.all() or b == -1:
-            return
         mood = self.creature_data['mood']
+        if not alive.all():
+            return
+        elif b == -1:
+            mood[a] = 1
+            return
         checks = {a: {'aggr': self.aggr_check(a),
                     'virility': self.virility_check(a)},
                     b: {'aggr': self.aggr_check(b),
@@ -877,12 +885,12 @@ def main():
             box_id = message['slave_id']
             #box_id = np.random.choice([1,2,3])
             if box_id == 1:
-                position = (-7.5,-5.5)
+                position = (0, 8.5)
             elif box_id == 2:
-                position = (0,9)
+                position = (6.8,-4.2)
             elif box_id == 3:
-                position = (7.5,-5.5)
-            culture.add_creature(creature_type, position, message)
+                position = (-6.8,-4.2)
+            culture.add_creature(creature_type, position, message, box_id)
             socket.send_string('OK', zmq.NOBLOCK)
         except zmq.error.Again:
             pass # no messages from sensor stations
