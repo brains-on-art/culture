@@ -47,7 +47,7 @@ def creature_system():
     static_data = square
     static_data_attributes = VAO.TEXTURED_DATA_2D
 
-    instance_data = sa.attach('creature_parts')
+    instance_data = sa.attach('creature_gfx')
     instance_data_attributes = CREATURE_DATA
 
     shader = boa_gfx.gl_shader.shader_manager.get_shader('creature.shader')
