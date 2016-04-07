@@ -54,7 +54,10 @@ def create_new_sa_array(name, shape, dtype):
 class Culture(TimeAware):
     def __init__(self):
         # Create creature parts array to share with visualization
-        self.creature_parts = create_new_sa_array('creature_parts', (max_creatures*max_parts, 12), np.float32)
+        self.creature_gfx = create_new_sa_array('creature_gfx', (max_creatures*max_parts, 12), np.float32)
+
+        #self.creature_parts = create_new_sa_array('creature_parts', (max_creatures*max_parts, 12), np.float32)
+        self.creature_parts = np.zeros((max_creatures*max_parts, 12), dtype=np.float32)
         # FIXME: refactor to creature_gfx
         self.creature_parts[:, :3] = offscreen_position  # Off-screen coordinates
         self.creature_parts[:, 3:] = 1.0  # Avoid undefined behavior by setting everything to one
@@ -64,23 +67,25 @@ class Culture(TimeAware):
         # self.creature_data[:, 1] = 100.0  # max_age
         # self.creature_data[:, 3] = 0.5  # creature size
         self.creature_data = np.recarray((max_creatures, ),
-                                dtype=[('alive', int),
-                                ('max_age', float),
-                                ('age', float),
-                                ('size', float),
-                                ('mood', int),
-                                ('started_colliding', float),
-                                ('ended_interaction', float),
-                                ('agility_base', float),
-                                ('virility_base', float),
-                                ('mojo', float),
-                                ('aggressiveness_base', float),
-                                ('power', float),
-                                ('hunger', float),
-                                ('type', int),
-                                ('color', int),
-                                ('interacting_with', int)])
-        self.creature_data.alive = 0
+                                dtype=[('alive', bool),
+                                       ('interactive', bool),
+                                       ('max_age', float),
+                                       ('age', float),
+                                       ('size', float),
+                                       ('mood', int),
+                                       ('started_colliding', float),
+                                       ('ended_interaction', float),
+                                       ('agility_base', float),
+                                       ('virility_base', float),
+                                       ('mojo', float),
+                                       ('aggressiveness_base', float),
+                                       ('power', float),
+                                       ('hunger', float),
+                                       ('type', int),
+                                       ('color', int),
+                                       ('interacting_with', int)])
+        self.creature_data.alive = False
+        self.creature_data.interactive = 0
         self.creature_data.max_age = 100.0
         self.creature_data.size = 0.5
 
@@ -143,12 +148,16 @@ class Culture(TimeAware):
         # self.dt = p0.0
 
     def demo_init(self):
-        for i in range(2):
-            self.add_creature('jelly', tuple(np.random.rand(2)*20.0 - 10.0))
-            self.add_creature('feet', tuple(np.random.rand(2) * 20.0 - 10.0))
-            self.add_creature('simple', tuple(np.random.rand(2) * 20.0 - 10.0))
-            self.add_creature('sperm', tuple(np.random.rand(2) * 20.0 - 10.0))
-        #self.add_creature('sperm', tuple(np.random.rand(2) * 20.0 - 10.0))
+        def rand_pos():
+            theta = np.random.rand()*2*np.pi
+            radius = np.random.rand()*12
+            return radius*np.cos(theta), radius*np.sin(theta)
+
+        for i in range(3):
+            self.add_creature('jelly', rand_pos())
+            self.add_creature('feet', rand_pos())
+            self.add_creature('simple', rand_pos())
+            self.add_creature('sperm', rand_pos())
 
         # for i in range(10):
         #     self.add_food(np.random.rand(2)*20.0 - 10.0)
@@ -198,7 +207,7 @@ class Culture(TimeAware):
         print('Adding creature ({}) at position {}'.format(type, position))
         print('Using data: ', data)
 
-        index = _find_first(self.creature_data['alive'], 0)
+        index = _find_first(self.creature_data['alive'], False)
         if index == -1: # Creature data is full
             print('Creature data is full, instakilling oldest creature')
             index = self.creature_data['age'].argmax()
@@ -230,8 +239,9 @@ class Culture(TimeAware):
 
         #{'mojo': 4, 'max_age': 0.18328243481718498, 'agressiveness_base': 1, 'power': 32215.83847390449, 'virility_base': 183.04049763745167, 'slave_id': 1, 'agility_base': 139.6109314200933, 'type': 0.0}
         data = data if data is not None else {}
-        self.creature_data[index]['alive'] = 1
         self.creature_data[index]['max_age'] = data['max_age'] if ('max_age' in data) and (data['max_age'] is not None) else np.random.random(1) * 180 + 180
+        self.creature_data[index]['alive'] = True
+
         self.creature_data[index]['age'] = 0
         self.creature_data[index]['size'] = 0.5
         self.creature_data[index]['mood'] = 1
@@ -247,10 +257,15 @@ class Culture(TimeAware):
         self.creature_data[index]['interacting_with'] = -1
 
         f = lambda: self.activate_creature_physics(index)
+        g = lambda: self.set_interactive(index)
 
         self.scheduler.enter(4.0, 0.0, f)
+        self.scheduler.enter(5.0, 0.0, g)
 
         self.add_animation('birth', position, scale=1.5, relative_start_time=3.0)
+
+    def set_interactive(self, index, value=True):
+        self.creature_data[index]['interactive'] = value
 
     def activate_creature_physics(self, index):
         cp = self.creature_physics[index]
@@ -489,6 +504,41 @@ class Culture(TimeAware):
 
         self.scheduler.enter(8.0, 0.0, f)
 
+    def kill_creature(self, index):
+        print('Killing creature at index', index)
+        self.set_interactive(index, False)
+
+        creature_type = self.creature_data[index]['type']
+        if creature_type == 1:  # JELLY
+            parts = 3
+        elif creature_type == 2:  # FEET
+            parts = 2
+        elif creature_type == 3:  # SIMPLE
+            parts = 1
+        elif creature_type == 4:  # SPERM
+            parts = 5
+        else:
+            print('Unknown creature type:', creature_type)
+
+        values = np.tile(self.creature_parts[max_parts * index:max_parts * index + parts, :8], (3, 1, 1))
+        # During first second set saturation to zero and alpha to 0.5
+        values[1, :, 6:] = (0.0, 0.5)  # saturation + alpha
+        # During second second set alpha to zero, move parts to head, and scale to zero
+        values[2, :, 6:] = (0.0, 0.0)  # saturation + alpha
+        values[2, :, :2] = values[0, 0, :2]  # position
+        values[2, :, 3] = 0.0  # scale
+
+        Interpolator.add_interpolator(self.creature_parts,
+                                      np.s_[max_parts * index:max_parts * index +parts, :8],
+                                      [0.0, 1.0, 2.0],
+                                      values)
+
+        self.add_animation('death', self.creature_parts[max_parts*index,:2], relative_start_time=2.0)
+
+        f = lambda: self.remove_creature(index)
+
+        self.scheduler.enter(2.1, 0.0, f)
+
     def update(self, dt):
         self.ct = time.perf_counter()
         # if self.ct - self.prev_update > 5.0:
@@ -522,7 +572,7 @@ class Culture(TimeAware):
         # Update appearance changes from aging and remove dead creatures
         self.creature_parts[:, 6] = np.clip(1.0 - (cur_age / max_age), 0.0, 1.0).repeat(max_parts)
         self.creature_parts[:, 7] = np.clip(1.0 - (cur_age - max_age)/3.0, 0.0, 1.0).repeat(max_parts)
-        dead_creatures = (alive == 1.0) & (cur_age > max_age + 3.0)
+        dead_creatures = alive & (cur_age > max_age + 3.0)
         for ind in np.where(dead_creatures)[0]:
             self.remove_creature(ind)
 
@@ -591,6 +641,7 @@ class Culture(TimeAware):
         positions = np.array([[(body.position.x, body.position.y, -body.angle) for body in creature['body']]
                               for creature in self.creature_physics if creature['active']]).reshape(mask.sum(), 3)
         self.creature_parts[mask, :3] = positions
+        self.creature_gfx[:,:] = self.creature_parts[::-1, :]
         #t2 = time.perf_counter()
         #print(t2-t1)
 
@@ -603,29 +654,24 @@ class Culture(TimeAware):
         #self.creature_parts[:, :3] = positions
         #print(t2-t1)
 
-    def can_start_interaction(self, arr_like):
-        mood = self.creature_data['mood']
-        last_interacted = self.creature_data['ended_interaction']
-        return (mood[arr_like] == 1).all() and ((self.ct - last_interacted[arr_like]) > resting_period).all()
+    def can_start_interaction(self, pair):
+        mood = self.creature_data['mood'][pair]
+        alive = self.creature_data['alive'][pair]
+        interactive = self.creature_data['interactive'][pair]
+        #last_interacted = self.creature_data['ended_interaction']
+        return (mood == 1).all() and alive.all() and interactive.all()  #((self.ct - last_interacted[arr_like]) > resting_period).all()
 
     def start_interaction(self, a, b):
-        alive = self.creature_data['alive']
+        alive = self.creature_data['alive'][[a,b]]
+        if not alive.all() or b == -1:
+            return
         mood = self.creature_data['mood']
         checks = {a: {'aggr': self.aggr_check(a),
                     'virility': self.virility_check(a)},
                     b: {'aggr': self.aggr_check(b),
                     'virility': self.virility_check(b)}}
         
-        if not (alive[[a,b]] == 1).all():
-            #raise NameError('{} and {} wanted to start interacting but one was dead: {}'.format(a,b,alive[[a,b]]))
-            if (not alive[b]) or (b == -1):
-                mood[a] = 1
-                self.creature_data['ended_interaction'][a] = self.ct
-                return
-            if (not alive[a]) or (a == -1):
-                mood[b] = 1
-                self.creature_data['ended_interaction'][b] = self.ct
-                return
+        # is b -1?
 
         # set animations immediately depending on aggression levels
         for i in [a,b]:
@@ -651,23 +697,16 @@ class Culture(TimeAware):
             mood[i] = -1
 
     def end_interaction(self, a, b):
-        alive = self.creature_data['alive']
+        alive = self.creature_data['alive'][[a,b]]
+        if not alive.all() or b == -1:
+            return
         mood = self.creature_data['mood']
         checks = {a: {'aggr': self.aggr_check(a),
                     'virility': self.virility_check(a)},
                     b: {'aggr': self.aggr_check(b),
                     'virility': self.virility_check(b)}}
 
-        if not (alive[[a,b]] == 1).all():
-            #raise NameError('{} and {} wanted to start interacting but one was dead: {}'.format(a,b,alive[[a,b]]))
-            if (not alive[b]) or (b == -1):
-                mood[a] = 1
-                self.creature_data['ended_interaction'][a] = self.ct
-                return
-            if (not alive[a]) or (a == -1):
-                mood[b] = 1
-                self.creature_data['ended_interaction'][b] = self.ct
-                return
+        # is b -1?
 
         # CASES:
         # 1. Both want a fight
@@ -680,19 +719,20 @@ class Culture(TimeAware):
             #                    rotation=np.random.rand() * 2 * np.pi,
             #                    num_loops=1)
 
-            x = self.creature_physics[loser]['body'][0].position.x
-            y = self.creature_physics[loser]['body'][0].position.y
-            def play_animation(x,y):
-                self.add_animation('death',
-                               position=(x, y),
-                               rotation=np.random.rand() * 2 * np.pi,
-                               num_loops=1)
-            self.scheduler.enter(1, 0.0, play_animation, (x,y))
+            self.kill_creature(loser)
+            #x = self.creature_physics[loser]['body'][0].position.x
+            #y = self.creature_physics[loser]['body'][0].position.y
+            #def play_animation(x,y):
+            #    self.add_animation('death',
+            #                   position=(x, y),
+            #                   rotation=np.random.rand() * 2 * np.pi,
+            #                   num_loops=1)
+            #self.scheduler.enter(1, 0.0, play_animation, (x,y))
 
-            self.creature_data['hunger'][winner] = 0
-            self.remove_creature(loser)
-            self.activate_creature_physics(winner)
-            mood[winner] = 1
+            #self.creature_data['hunger'][winner] = 0
+            #self.remove_creature(loser)
+            #self.activate_creature_physics(winner)
+            #mood[winner] = 1
 
         # 2. One wants to fight, other wants to run away
         elif checks[a]['aggr'] or checks[b]['aggr']:
@@ -712,16 +752,17 @@ class Culture(TimeAware):
                 #                    position=(self.creature_physics[escaper]['body'][0].position.x, self.creature_physics[escaper]['body'][0].position.y),
                 #                    rotation=np.random.rand() * 2 * np.pi,
                 #                    num_loops=1)
-                x = self.creature_physics[escaper]['body'][0].position.x
-                y = self.creature_physics[escaper]['body'][0].position.y
-                def play_animation(x,y):
-                    self.add_animation('death',
-                                   position=(x, y),
-                                   rotation=np.random.rand() * 2 * np.pi,
-                                   num_loops=1)
-                self.scheduler.enter(1, 0.0, play_animation, (x,y))
+                #x = self.creature_physics[escaper]['body'][0].position.x
+                #y = self.creature_physics[escaper]['body'][0].position.y
+                #def play_animation(x,y):
+                #    self.add_animation('death',
+                #                   position=(x, y),
+                #                   rotation=np.random.rand() * 2 * np.pi,
+                #                   num_loops=1)
+                #self.scheduler.enter(1, 0.0, play_animation, (x,y))
 
-                self.remove_creature(escaper)
+                #self.remove_creature(escaper)
+                self.kill_creature(escaper)
                 self.creature_data['hunger'][aggressor] = 0
                 self.activate_creature_physics(aggressor)
                 mood[aggressor] = 1
@@ -799,7 +840,7 @@ class Culture(TimeAware):
     @staticmethod
     def cleanup():
         print('Cleaning up')
-        sa.delete('creature_parts')
+        sa.delete('creature_gfx')
 
 
 def main():
