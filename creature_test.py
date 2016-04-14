@@ -17,7 +17,7 @@ import pymunk as pm
 from boa_gfx.time import TimeAware, TimeKeeper, Interpolator
 
 zmq_port = '5556'
-max_creatures = 25
+max_creatures = 100
 max_parts = 5
 offscreen_position = (30.0, 30.0, 0.0)
 
@@ -25,6 +25,8 @@ max_food = 100
 max_animations = 100
 
 resting_period = 60
+
+creature_types = ['feet', 'simple', 'jelly', 'sperm']
 
 @numba.jit
 def _find_first(vec, item):
@@ -219,9 +221,13 @@ class Culture(TimeAware):
 
         cp = self.creature_physics[index]
 
+        box_starting_dir = {1: (0, -10),
+                            2: (-5, 5),
+                            3: (5, 5)}
+
         cp['target'] = pm.Body(10.0, 10.0)
         cp['target'].position = position
-        cp['target'].position += (0.0, 10.0)
+        cp['target'].position += box_starting_dir[box_id] if box_id else random_circle_point()
 
         cp['body'] = [pm.Body(10.0, 5.0) for x in range(max_parts)]
         for i in range(max_parts):
@@ -243,7 +249,8 @@ class Culture(TimeAware):
 
         #{'mojo': 4, 'max_age': 0.18328243481718498, 'agressiveness_base': 1, 'power': 32215.83847390449, 'virility_base': 183.04049763745167, 'slave_id': 1, 'agility_base': 139.6109314200933, 'type': 0.0}
         data = data if data is not None else {}
-        self.creature_data[index]['max_age'] = data['max_age'] if ('max_age' in data) and (data['max_age'] is not None) else np.random.random(1) * 180 + 180
+        #self.creature_data[index]['max_age'] = data['max_age'] if ('max_age' in data) and (data['max_age'] is not None) else np.random.random(1) * 180 + 180
+        self.creature_data[index]['max_age'] = data['virility_base'] if ('virility_base' in data) and (data['max_age'] is not None) else np.random.random(1) * 180 + 180
         self.creature_data[index]['alive'] = True
 
         self.creature_data[index]['age'] = 0
@@ -307,9 +314,11 @@ class Culture(TimeAware):
 
 
         animation_vec = [0.0, 1.0, 1.0, 1.0]  # Animation time offset, beat frequency, swirl radius, swirl frequency
+        color = np.random.choice([-30.0, 0.0, 30.0, 60.0])
+        color /= 180.0
         for i in range(3):
             position_vec = [position[0], position[1]-0.3*(i+1), 0.0, 0.5]  # Position, rotation, scale
-            texture_vec = [self.get_texture('jelly'), 0.0, 1.0, 1.0]  # Texture index, color rotation, saturation, alpha
+            texture_vec = [self.get_texture('jelly'), color, 1.0, 1.0]  # Texture index, color rotation, saturation, alpha
             self.creature_parts[max_parts*index+i, :] = position_vec + texture_vec + animation_vec
 
         Interpolator.add_interpolator(self.creature_parts,
@@ -330,12 +339,14 @@ class Culture(TimeAware):
         cp['constraint'] += [pm.constraint.PivotJoint(top, bottom, (0.0, 0.0), (0.0, 0.0)),
                              pm.constraint.GearJoint(top, bottom, 0.0, 1.0)]
 
+        color = np.random.choice([-30.0, 0.0, 30.0, 60.0])
+        color /= 180.0
         position_vec = [position[0], position[1], 0.0, 0.5]  # Position, rotation, scale
         animation_vec = [0.0, 1.0, 1.0, 1.0]  # Animation time offset, beat frequency, swirl radius, swirl frequency
         tex = self.get_texture('feet')
-        texture_vec = [tex[1], 0.0, 1.0, 1.0]
+        texture_vec = [tex[1], color, 1.0, 1.0]
         self.creature_parts[max_parts * index, :] = position_vec + texture_vec + animation_vec
-        texture_vec = [tex[0], 0.25, 1.0, 0.01]
+        texture_vec = [tex[0], color, 1.0, 0.01]
         self.creature_parts[max_parts * index + 1, :] = position_vec + texture_vec + animation_vec
 
         Interpolator.add_interpolator(self.creature_parts,
@@ -353,9 +364,12 @@ class Culture(TimeAware):
         head = cp['body'][0]
         head.position = position
 
+        color = np.random.choice([-30.0, 0.0, 30.0, 60.0])
+        color /= 180.0
+
         position_vec = [position[0], position[1], 0.0, 0.5]  # Position, rotation, scale
         animation_vec = [0.0, 1.0, 1.0, 1.0]  # Animation time offset, beat frequency, swirl radius, swirl frequency
-        texture_vec = [self.get_texture('simple'), 0.0, 1.0, 1.0]
+        texture_vec = [self.get_texture('simple'), color, 1.0, 1.0]
         self.creature_parts[max_parts*index, :] = position_vec + texture_vec + animation_vec
 
         Interpolator.add_interpolator(self.creature_parts,
@@ -379,14 +393,17 @@ class Culture(TimeAware):
             cp['constraint'].append(pm.constraint.SlideJoint(a, b, (0.0, -0.3), (0.0, 0.3), 0.1*(0.8**i), 0.2*(0.8**i)))
             cp['constraint'].append(pm.constraint.RotaryLimitJoint(a, b, -0.5, 0.5))
 
+        color = np.random.choice([-30.0, 0.0, 30.0, 60.0])
+        color /= 180.0
+
         position_vec = [position[0], position[1], 0.0, 0.5]  # Position, rotation, scale
         animation_vec = [0.0, 1.0, 1.0, 1.0]  # Animation time offset, beat frequency, swirl radius, swirl frequency
         tex_head, tex_tail = self.get_texture('sperm'), self.get_texture('sperm')
-        texture_vec = [tex_head, 0.0, 1.0, 1.0]  # Texture index, color rotation, saturation, alpha
+        texture_vec = [tex_head, color, 1.0, 1.0]  # Texture index, color rotation, saturation, alpha
         self.creature_parts[max_parts * index, :] = position_vec + texture_vec + animation_vec
         for i in range(4):
             position_vec = [position[0], position[1]-0.5*(i+1), 0.0, 1.0]
-            texture_vec = [tex_tail, 0.25, 1.0, 1.0]  # Texture index, color rotation, saturation, alpha
+            texture_vec = [tex_tail, color, 1.0, 1.0]  # Texture index, color rotation, saturation, alpha
             self.creature_parts[max_parts * index + (i+1), :] = position_vec + texture_vec + animation_vec
 
         Interpolator.add_interpolator(self.creature_parts,
@@ -629,9 +646,13 @@ class Culture(TimeAware):
 
             elif mood[i] == 1:
                 # Default mood, move creatures according to their type
-                if creature_type[i] == 1:
-                    if cp['body'][0].velocity.get_length() < 0.7:
-                        cp['target'].position += random_circle_point()
+                #if creature_type[i] in [0,1,2,3]:
+                #    if cp['body'][0].velocity.get_length() < 1:
+                #        cp['target'].position += random_circle_point()
+                if cp['body'][0].velocity.get_length() < 1:
+                    cp['target'].position += random_circle_point()
+
+
                 #    for j in range(3):
                 #        self.creature_parts[3*i+j, :2] = tuple(self.pm_body[i][j].position)
                 #        self.creature_parts[3*i+j, 2] = self.pm_body[i][j].angle
@@ -782,6 +803,10 @@ class Culture(TimeAware):
             # create new based on a, b
             map(self.activate_creature_physics, [a,b])
             mood[[a,b]] = 1
+            new_type = np.random.choice(self.creature_data['type'][[a,b]])
+            new_type = np.clip(new_type, 0, 3)
+            #self.add_creature(np.random.choice(self.creature_data['type'][[a,b]]), self.creature_physics[a]['body'][0].position)
+            self.add_creature(creature_types[new_type], self.creature_physics[a]['body'][0].position)
             print('HUBBA HUBBA, {} and {} reproduced'.format(a,b))
 
         # 5. One wants to reproduce, other wants to run
@@ -798,7 +823,11 @@ class Culture(TimeAware):
                 # create new based on a, b
                 map(self.activate_creature_physics, [a,b])
                 mood[[a,b]] = 1
-                print('{} wanted to reproduce with {}, but they got away'.format(aggressor, escaper))
+                new_type = np.random.choice(self.creature_data['type'][[a,b]])
+                new_type = np.clip(new_type, 0, 3)
+                #self.add_creature(np.random.choice(self.creature_data['type'][[a,b]]), self.creature_physics[a]['body'][0].position)
+                self.add_creature(creature_types[new_type], self.creature_physics[a]['body'][0].position)
+                print('{} forcefully reproduced with {}'.format(aggressor, escaper))
 
         # go back to normal
         # mood[[a,b]] = 1
@@ -877,7 +906,7 @@ def main():
         try:
             message = socket.recv_json(zmq.NOBLOCK)
             print(message)
-            creature_types = ['feet', 'simple', 'jelly', 'sperm']
+            #creature_types = ['feet', 'simple', 'jelly', 'sperm']
             if message and 'type' in message:
                 creature_type = creature_types[np.clip(int(message['type']),0,3)]
             else:
