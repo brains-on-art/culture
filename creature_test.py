@@ -837,8 +837,12 @@ class Culture(TimeAware):
                 self.add_creature(creature_types[new_type], self.creature_physics[a]['body'][0].position)
                 print('{} forcefully reproduced with {}'.format(aggressor, escaper))
 
+        # 6. No one wants to do anything
+        else:
+            map(self.activate_creature_physics, [a,b])
+            mood[[a,b]] = 1
+
         # go back to normal
-        # mood[[a,b]] = 1
         print('interactions ended for {} and {}. mood[a]={}, mood[b]={}'.format(a,b, mood[a], mood[b]))
         self.creature_data['ended_interaction'][[a,b]] = self.ct
         self.creature_data['interacting_with'][[a,b]] = -1
