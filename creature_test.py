@@ -769,7 +769,7 @@ class Culture(TimeAware):
             #self.creature_data['hunger'][winner] = 0
             #self.remove_creature(loser)
             #self.activate_creature_physics(winner)
-            #mood[winner] = 1
+            mood[winner] = 1
 
         # 2. One wants to fight, other wants to run away
         elif checks[a]['aggr'] or checks[b]['aggr']:
@@ -839,25 +839,25 @@ class Culture(TimeAware):
 
         # go back to normal
         # mood[[a,b]] = 1
-        print('interactions ended for {} and {}'.format(a,b))
+        print('interactions ended for {} and {}. mood[a]={}, mood[b]={}'.format(a,b, mood[a], mood[b]))
         self.creature_data['ended_interaction'][[a,b]] = self.ct
         self.creature_data['interacting_with'][[a,b]] = -1
 
     # Roll a die -> if it's below creatures stat, success
     def aggr_check(self, i):
         aggr = self.creature_data['aggressiveness_base'] + self.creature_data['hunger']
-        print('aggro checking {}, base aggr {:.3f}, current aggr {:.3f}'.format(i, self.creature_data['aggressiveness_base'][i], aggr[i]))
+        # print('aggro checking {}, base aggr {:.3f}, current aggr {:.3f}'.format(i, self.creature_data['aggressiveness_base'][i], aggr[i]))
         # return np.random.random() < np.clip(aggr[i], 0.0, 0.9)
         return np.random.random()*2 < np.clip(aggr[i], 0.0, 1.8)
     def virility_check(self, i):
         virility = self.creature_data['virility_base'] + 1 - self.creature_data['hunger']
-        print('virility checking {}, base virility {:.3f}, current virility {:.3f}'.format(i, self.creature_data['virility_base'][i], virility[i]))
+        # print('virility checking {}, base virility {:.3f}, current virility {:.3f}'.format(i, self.creature_data['virility_base'][i], virility[i]))
         # return np.random.random() < np.clip(virility[i], 0.0, 0.9)
         return np.random.random()*2 < np.clip(virility[i], 0.0, 1.8)
     # Just compare the powers
     def power_check(self, a, b):
         power = self.creature_data['power']
-        print('comparing powers: a:{} VS b:{}'.format(power[a], power[b]))
+        # print('comparing powers: a:{} VS b:{}'.format(power[a], power[b]))
         return a if power[a] > power[b] else b
 
     # A fight will happen if the aggressor is faster
