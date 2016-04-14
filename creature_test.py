@@ -87,8 +87,8 @@ class Culture(TimeAware):
                                        ('color', int),
                                        ('interacting_with', int)])
         self.creature_data.alive = False
-        self.creature_data.interactive = 0
-        self.creature_data.max_age = 100.0
+        self.creature_data.interactive = False
+        self.creature_data.max_age = 3600
         self.creature_data.size = 0.5
 
         root, dirs, files = next(os.walk('./textures/creatures/'))
@@ -736,6 +736,7 @@ class Culture(TimeAware):
         if not alive.all():
             return
         elif b == -1:
+            self.activate_creature_physics(a)
             mood[a] = 1
             return
         checks = {a: {'aggr': self.aggr_check(a),
