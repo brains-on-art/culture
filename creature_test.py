@@ -755,6 +755,7 @@ class Culture(TimeAware):
             #                    num_loops=1)
 
             self.kill_creature(loser)
+            self.activate_creature_physics(winner)
             #x = self.creature_physics[loser]['body'][0].position.x
             #y = self.creature_physics[loser]['body'][0].position.y
             #def play_animation(x,y):
@@ -809,7 +810,7 @@ class Culture(TimeAware):
             # create new based on a, b
             map(self.activate_creature_physics, [a,b])
             mood[[a,b]] = 1
-            new_type = np.random.choice(self.creature_data['type'][[a,b]])
+            new_type = np.random.choice(self.creature_data['type'][[a,b]]) - 1
             new_type = np.clip(new_type, 0, 3)
             #self.add_creature(np.random.choice(self.creature_data['type'][[a,b]]), self.creature_physics[a]['body'][0].position)
             self.add_creature(creature_types[new_type], self.creature_physics[a]['body'][0].position)
