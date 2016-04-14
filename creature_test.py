@@ -208,10 +208,10 @@ class Culture(TimeAware):
     def add_creature(self, type, position, data=None, box_id=None):
         print('Adding creature ({}) at position {}'.format(type, position))
         print('Using data: ', data)
-        if box_id:
-            subprocess.call(["wemo", "switch", "switch-0{}".format(box_id), "off"])
-            fog_off = lambda pos: subprocess.call(["wemo", "switch", "switch-0{}".format(pos), "on"])
-            self.scheduler.enter(8.0, 0.0, fog_off, argument=(box_id,))
+        # if box_id:
+        #     subprocess.call(["wemo", "switch", "switch-0{}".format(box_id), "off"])
+        #     fog_off = lambda pos: subprocess.call(["wemo", "switch", "switch-0{}".format(pos), "on"])
+        #     self.scheduler.enter(8.0, 0.0, fog_off, argument=(box_id,))
 
         index = _find_first(self.creature_data['alive'], False)
         if index == -1: # Creature data is full
