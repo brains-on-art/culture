@@ -278,6 +278,9 @@ class Culture(TimeAware):
     def set_interactive(self, index, value=True):
         self.creature_data[index]['interactive'] = value
 
+    def is_recovering(self, index):
+        return (self.ct - self.creature_data[index]['ended_interaction']) < resting_period
+
     def activate_creature_physics(self, index):
         cp = self.creature_physics[index]
 
@@ -684,6 +687,10 @@ class Culture(TimeAware):
         alive = self.creature_data['alive'][pair]
         interactive = self.creature_data['interactive'][pair]
         #last_interacted = self.creature_data['ended_interaction']
+
+        if self.is_recovering(pair).any():
+            return False
+
         return (mood == 1).all() and alive.all() and interactive.all()  #((self.ct - last_interacted[arr_like]) > resting_period).all()
 
     def start_interaction(self, a, b):
@@ -734,8 +741,6 @@ class Culture(TimeAware):
                     'virility': self.virility_check(a)},
                     b: {'aggr': self.aggr_check(b),
                     'virility': self.virility_check(b)}}
-
-        # is b -1?
 
         # CASES:
         # 1. Both want a fight
