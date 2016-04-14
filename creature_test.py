@@ -646,8 +646,6 @@ class Culture(TimeAware):
                         # body.velocity = (0, 0)
                     self.deactivate_creature_physics(i)
                 else:
-                    self.activate_creature_physics(i)
-                    self.activate_creature_physics(interacting_with[i])
                     self.end_interaction(i, interacting_with[i])
 
             elif mood[i] == 1:
