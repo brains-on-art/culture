@@ -646,6 +646,8 @@ class Culture(TimeAware):
                         # body.velocity = (0, 0)
                     self.deactivate_creature_physics(i)
                 else:
+                    self.activate_creature_physics(i)
+                    self.activate_creature_physics(interacting_with[i])
                     self.end_interaction(i, interacting_with[i])
 
             elif mood[i] == 1:
@@ -781,8 +783,8 @@ class Culture(TimeAware):
                 # mood[[a,b]] = 1
                 # self.creature_data[[a,b]]['ended_interaction'] = self.ct
                 # print('{} got away'.format(escaper))
-                map(self.activate_creature_physics, [a,b])
                 mood[[a,b]] = 1
+                map(self.activate_creature_physics, [aggressor,escaper])
                 print('{} wanted to fight {}, but it got away'.format(aggressor, escaper))
             else:
                 # self.add_animation('death',
