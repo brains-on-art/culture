@@ -781,8 +781,10 @@ class Culture(TimeAware):
                 # mood[[a,b]] = 1
                 # self.creature_data[[a,b]]['ended_interaction'] = self.ct
                 # print('{} got away'.format(escaper))
-                mood[[a,b]] = 1
-                map(self.activate_creature_physics, [aggressor,escaper])
+                mood[[aggressor,escaper]] = 1
+                self.activate_creature_physics(aggressor)
+                self.activate_creature_physics(escaper)
+                # map(self.activate_creature_physics, [aggressor,escaper])
                 print('{} wanted to fight {}, but it got away'.format(aggressor, escaper))
             else:
                 # self.add_animation('death',
@@ -809,7 +811,9 @@ class Culture(TimeAware):
         # 4. Both want to reproduce
         elif checks[a]['virility'] and checks[b]['virility']:
             # create new based on a, b
-            map(self.activate_creature_physics, [a,b])
+            # map(self.activate_creature_physics, [a,b])
+            self.activate_creature_physics(a)
+            self.activate_creature_physics(b)
             mood[[a,b]] = 1
             new_type = np.random.choice(self.creature_data['type'][[a,b]]) - 1
             new_type = np.clip(new_type, 0, 3)
@@ -824,12 +828,16 @@ class Culture(TimeAware):
             escaper = b if aggressor == a else a
             escaped = self.escape_attempt(escaper, aggressor)
             if escaped:
-                map(self.activate_creature_physics, [a,b])
-                mood[[a,b]] = 1
+                # map(self.activate_creature_physics, [a,b])
+                self.activate_creature_physics(aggressor)
+                self.activate_creature_physics(escaper)
+                mood[[aggressor,escaper]] = 1
                 print('{} wanted to reproduce with {}, but they got away'.format(aggressor, escaper))
             else:
                 # create new based on a, b
-                map(self.activate_creature_physics, [a,b])
+                # map(self.activate_creature_physics, [a,b])
+                self.activate_creature_physics(a)
+                self.activate_creature_physics(b)
                 mood[[a,b]] = 1
                 new_type = np.random.choice(self.creature_data['type'][[a,b]])
                 new_type = np.clip(new_type, 0, 3)
@@ -839,6 +847,7 @@ class Culture(TimeAware):
 
         # 6. No one wants to do anything
         else:
+            print('{} interacted with {}, but they both did nothing'.format(a, b))
             map(self.activate_creature_physics, [a,b])
             mood[[a,b]] = 1
 
