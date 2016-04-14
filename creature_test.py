@@ -251,6 +251,7 @@ class Culture(TimeAware):
         data = data if data is not None else {}
         #self.creature_data[index]['max_age'] = data['max_age'] if ('max_age' in data) and (data['max_age'] is not None) else np.random.random(1) * 180 + 180
         self.creature_data[index]['max_age'] = data['virility_base'] if ('virility_base' in data) and (data['max_age'] is not None) else np.random.random(1) * 180 + 180
+        self.creature_data[index]['max_age'] = self.creature_data[index]['max_age'] + 3600 #everyone lives at least an hour (60 * 60)
         self.creature_data[index]['alive'] = True
 
         self.creature_data[index]['age'] = 0
@@ -581,7 +582,7 @@ class Culture(TimeAware):
         cur_age[:] += dt
         # ...and compute the other dynamic params
         hunger = self.creature_data['hunger']
-        hunger[:] += dt / 5
+        hunger[:] += dt / 600 # it will take 10 minutes (60 * 10) for hunger to grow from 0 to 1
         self.creature_data['hunger'] = np.clip(hunger, 0, 1)
         # agility = self.creature_data['agility_base'] * (1 - (self.creature_data['age'] / self.creature_data['max_age']))
         # succulence = 1 - hunger
@@ -843,17 +844,18 @@ class Culture(TimeAware):
     # Roll a die -> if it's below creatures stat, success
     def aggr_check(self, i):
         aggr = self.creature_data['aggressiveness_base'] + self.creature_data['hunger']
-        #print('aggro checking {}, base aggr {:.3f}, current aggr {:.3f}'.format(i, self.creature_data['aggressiveness_base'][i], aggr[i]))
+        print('aggro checking {}, base aggr {:.3f}, current aggr {:.3f}'.format(i, self.creature_data['aggressiveness_base'][i], aggr[i]))
         # return np.random.random() < np.clip(aggr[i], 0.0, 0.9)
         return np.random.random()*2 < np.clip(aggr[i], 0.0, 1.8)
     def virility_check(self, i):
         virility = self.creature_data['virility_base'] + 1 - self.creature_data['hunger']
-        #print('virility checking {}, base virility {:.3f}, current virility {:.3f}'.format(i, self.creature_data['virility_base'][i], virility[i]))
+        print('virility checking {}, base virility {:.3f}, current virility {:.3f}'.format(i, self.creature_data['virility_base'][i], virility[i]))
         # return np.random.random() < np.clip(virility[i], 0.0, 0.9)
         return np.random.random()*2 < np.clip(virility[i], 0.0, 1.8)
     # Just compare the powers
     def power_check(self, a, b):
         power = self.creature_data['power']
+        print('comparing powers: a:{} VS b:{}'.format(power[a], power[b]))
         return a if power[a] > power[b] else b
 
     # A fight will happen if the aggressor is faster
